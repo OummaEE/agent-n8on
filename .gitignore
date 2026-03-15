@@ -1,5 +1,26 @@
+# Build artifacts
 target/
 node_modules/
+dist/
 *.pdb
 *.rlib
-dist/
+
+# Test files
+test_*.py
+
+# Backups
+*_backup_*.py
+
+# Temp files
+*.log
+*.tmp
+*.bak
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
