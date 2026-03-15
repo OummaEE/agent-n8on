@@ -4,130 +4,239 @@ on:
   workflow_dispatch:
     inputs:
       n8n_version:
-        description: 'n8n version'
+        description: 'n8n version to build'
         required: true
         default: '2.11.3'
       node_version:
         description: 'Node.js version'
         required: true
-        default: '20.11.0'
-      runtime_tag:
-        description: 'Release tag (e.g., runtime-v1.0.0)'
-        required: true
-        default: 'runtime-v1.0.0'
+        default: '20.19.0'
+  push:
+    tags: ['v*']
+
+env:
+  N8N_VERSION: ${{ github.event.inputs.n8n_version || '2.11.3' }}
+  NODE_VERSION: ${{ github.event.inputs.node_version || '20.19.0' }}
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  build-runtime:
+    # Pinned windows-2022, НЕ windows-latest
+    runs-on: windows-2022
+    
     steps:
+      - uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ inputs.node_version }}
+          node-version: ${{ env.NODE_VERSION }}
 
-      - name: Pin npm version (avoid 10.9.x bugs)
-        run: npm install -g npm@10.8.2
+      - name: Setup MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
 
-      - name: Create runtime structure
-        run: |
-          mkdir runtime
-          mkdir runtime\node
-          mkdir runtime\n8n
-
-      - name: Download portable Node.js
+      - name: Configure npm for MSVC 2022
         shell: pwsh
         run: |
-          $nodeVersion = "${{ inputs.node_version }}"
-          $url = "https://nodejs.org/dist/v$nodeVersion/node-v$nodeVersion-win-x64.zip"
-          Write-Host "Downloading Node.js from $url"
-          Invoke-WebRequest -Uri $url -OutFile node.zip
-          Expand-Archive -Path node.zip -DestinationPath temp-node
-          Move-Item -Path "temp-node\node-v$nodeVersion-win-x64\*" -Destination "runtime\node"
-          Remove-Item -Path node.zip
-          Remove-Item -Path temp-node -Recurse
-          Write-Host "Node.js extracted to runtime\node"
+          npm config set msvs_version 2022
 
-      - name: Verify node.exe exists
+      # ============================================================
+      # ДИАГНОСТИКА — без этого шага не гадаем, а знаем
+      # ============================================================
+      - name: Diagnostics - toolchain environment
         shell: pwsh
         run: |
-          if (-Not (Test-Path "runtime\node\node.exe")) {
-            Write-Error "node.exe not found!"
-            exit 1
+          Write-Host "=== Node / npm ==="
+          node -v
+          npm -v
+          
+          Write-Host "`n=== npm config ==="
+          npm config list
+          npm config get msvs_version
+          
+          Write-Host "`n=== Python ==="
+          where.exe python 2>$null || Write-Host "python not found in PATH"
+          python --version 2>$null || Write-Host "python --version failed"
+          
+          Write-Host "`n=== C++ compiler (cl.exe) ==="
+          where.exe cl 2>$null || Write-Host "cl.exe not found in PATH"
+          cl 2>&1 | Select-Object -First 2
+          
+          Write-Host "`n=== MSBuild ==="
+          where.exe msbuild 2>$null || Write-Host "msbuild not found in PATH"
+          
+          Write-Host "`n=== vswhere — installed VS products ==="
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (Test-Path $vswhere) {
+            & $vswhere -all -products * -format json | ConvertFrom-Json | ForEach-Object {
+              Write-Host "  $($_.displayName) — $($_.installationPath)"
+            }
+          } else {
+            Write-Host "vswhere.exe not found"
           }
-          & "runtime\node\node.exe" --version
+          
+          Write-Host "`n=== Windows SDK versions installed ==="
+          $sdkLibPath = "C:\Program Files (x86)\Windows Kits\10\Lib"
+          if (Test-Path $sdkLibPath) {
+            Get-ChildItem $sdkLibPath -Directory | ForEach-Object { Write-Host "  $($_.Name)" }
+          } else {
+            Write-Host "Windows Kits\10\Lib directory NOT FOUND — this is likely the problem"
+          }
+          
+          $sdkIncludePath = "C:\Program Files (x86)\Windows Kits\10\Include"
+          if (Test-Path $sdkIncludePath) {
+            Write-Host "`n=== Windows SDK Include directories ==="
+            Get-ChildItem $sdkIncludePath -Directory | ForEach-Object { Write-Host "  $($_.Name)" }
+          }
+          
+          Write-Host "`n=== Key env vars ==="
+          Write-Host "INCLUDE: $env:INCLUDE"
+          Write-Host "LIB: $env:LIB"
+          Write-Host "VSINSTALLDIR: $env:VSINSTALLDIR"
+          Write-Host "WindowsSdkDir: $env:WindowsSdkDir"
+          Write-Host "WindowsSDKVersion: $env:WindowsSDKVersion"
+          
+          Write-Host "`n=== PATH (first 10 entries) ==="
+          $env:PATH -split ';' | Select-Object -First 10 | ForEach-Object { Write-Host "  $_" }
 
-      - name: Install n8n
+      # ============================================================
+      # DEFENDER EXCLUSIONS — best-effort mitigation, не гарантия
+      # ============================================================
+      - name: Add Defender exclusions (best-effort mitigation for EPERM/EBUSY)
         shell: pwsh
         run: |
-          npm install n8n@${{ inputs.n8n_version }} --prefix ./runtime/n8n --omit=dev --no-audit --no-fund --legacy-peer-deps
+          Write-Host "Defender exclusions are best-effort only — may not resolve all EPERM/EBUSY"
+          
+          Add-MpPreference -ExclusionPath "${{ github.workspace }}" -ErrorAction SilentlyContinue
+          Add-MpPreference -ExclusionPath "$env:TEMP" -ErrorAction SilentlyContinue
+          Add-MpPreference -ExclusionPath "$env:APPDATA\npm" -ErrorAction SilentlyContinue
+          
+          try {
+            $prefs = Get-MpPreference -ErrorAction Stop
+            Write-Host "Current exclusion paths:"
+            $prefs.ExclusionPath | ForEach-Object { Write-Host "  $_" }
+          } catch {
+            Write-Host "WARNING: Could not read Defender preferences — exclusions may not have applied"
+          }
+
+      # ============================================================
+      # СБОРКА
+      # ============================================================
+      - name: Install n8n runtime
+        shell: pwsh
         env:
-          npm_config_loglevel: warn
-
-      - name: Verify n8n bin exists
-        shell: pwsh
+          npm_config_msvs_version: '2022'
         run: |
-          $n8nBin = "runtime\n8n\node_modules\n8n\bin\n8n"
-          if (-Not (Test-Path $n8nBin)) {
-            Write-Error "n8n bin not found at $n8nBin"
-            Get-ChildItem -Path "runtime\n8n" -Recurse -Name "n8n" | Where-Object { $_ -like "*bin*" }
-            exit 1
-          }
-          Write-Host "n8n bin found at $n8nBin"
-
-      - name: Create version manifest
-        shell: pwsh
-        run: |
-          $manifest = @{
-            n8n_version  = "${{ inputs.n8n_version }}"
-            node_version = "${{ inputs.node_version }}"
-            npm_version  = "10.8.2"
-            runtime_tag  = "${{ inputs.runtime_tag }}"
-            built_at     = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
-            paths        = @{
-              node_exe = "node\node.exe"
-              n8n_bin  = "n8n\node_modules\n8n\bin\n8n"
+          Write-Host "Installing n8n@${{ env.N8N_VERSION }}..."
+          Write-Host "This will take 5-15 minutes depending on native module compilation"
+          
+          # Первая попытка
+          npm install "n8n@${{ env.N8N_VERSION }}" --prefix ./runtime/n8n --omit=dev 2>&1 | Tee-Object -FilePath npm-install.log
+          $exitCode = $LASTEXITCODE
+          
+          if ($exitCode -ne 0) {
+            Write-Host "::warning::First npm install attempt failed with exit code $exitCode"
+            Write-Host "=== Last 50 lines of npm log ==="
+            Get-Content npm-install.log | Select-Object -Last 50
+            
+            $log = Get-Content npm-install.log -Raw
+            
+            if ($log -match "EPERM|EBUSY") {
+              Write-Host "::warning::EPERM/EBUSY detected — retrying with npm cache clean + --force"
+              npm cache clean --force
+              Start-Sleep -Seconds 5
+              npm install "n8n@${{ env.N8N_VERSION }}" --prefix ./runtime/n8n --omit=dev --force 2>&1 | Tee-Object -FilePath npm-install-retry.log
+              
+              if ($LASTEXITCODE -ne 0) {
+                Write-Host "::error::Retry npm install failed with exit code $LASTEXITCODE"
+                Get-Content npm-install-retry.log | Select-Object -Last 50
+                exit 1
+              }
+            }
+            elseif ($log -match "Windows SDK|node-gyp|gyp ERR") {
+              Write-Host "::error::Build toolchain issue detected. Check diagnostics step above."
+              Write-Host "::error::If Windows SDK is missing, self-hosted runner is needed."
+              exit 1
+            }
+            else {
+              Write-Host "::error::Unknown npm install failure. Full log attached as artifact."
+              exit 1
             }
           }
-          $manifest | ConvertTo-Json -Depth 3 | Out-File -FilePath runtime\manifest.json -Encoding UTF8
 
-      - name: Archive runtime
-        shell: pwsh
-        run: Compress-Archive -Path ./runtime/* -DestinationPath n8n-runtime-win64.zip -CompressionLevel Optimal
-
-      - name: Get archive size
+      - name: Verify n8n starts
         shell: pwsh
         run: |
+          Write-Host "Testing n8n startup with --no-node-snapshot..."
+          $env:NODE_OPTIONS = "--no-node-snapshot"
+          
+          $n8nBin = "./runtime/n8n/node_modules/n8n/bin/n8n"
+          if (Test-Path $n8nBin) {
+            node --no-node-snapshot $n8nBin --help 2>&1 | Select-Object -First 5
+            Write-Host "n8n binary responds — OK"
+          } else {
+            $found = Get-ChildItem -Path ./runtime -Recurse -Filter "n8n" -File | Where-Object { $_.Extension -eq "" -or $_.Extension -eq ".js" } | Select-Object -First 3
+            Write-Host "n8n binary not found at expected path. Found files:"
+            $found | ForEach-Object { Write-Host "  $($_.FullName)" }
+            Write-Host "::error::n8n binary not found at expected path and could not validate runtime structure"
+            exit 1
+          }
+
+      - name: Package runtime
+        shell: pwsh
+        run: |
+          Write-Host "Packaging runtime..."
+          Compress-Archive -Path ./runtime/* -DestinationPath n8n-runtime-win64.zip -Force
+          
+          $hash = (Get-FileHash n8n-runtime-win64.zip -Algorithm SHA256).Hash
+          $hash | Out-File -FilePath sha256.txt -NoNewline
+          
           $size = (Get-Item n8n-runtime-win64.zip).Length / 1MB
-          Write-Host "Archive size: $([math]::Round($size, 2)) MB"
-
-      - name: Calculate SHA256
-        id: hash
-        shell: pwsh
-        run: |
-          $hash = (Get-FileHash -Path n8n-runtime-win64.zip -Algorithm SHA256).Hash
+          Write-Host "Runtime package: n8n-runtime-win64.zip"
+          Write-Host "Size: $([math]::Round($size, 1)) MB"
           Write-Host "SHA256: $hash"
-          echo "sha256=$hash" >> $env:GITHUB_OUTPUT
-          $hash | Out-File -FilePath n8n-runtime-win64.zip.sha256 -Encoding UTF8
 
-      - name: Upload artifact
+      # ============================================================
+      # АРТЕФАКТЫ И РЕЛИЗ
+      # ============================================================
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: n8n-runtime-win64
-          path: n8n-runtime-win64.zip
+          path: |
+            n8n-runtime-win64.zip
+            sha256.txt
           retention-days: 30
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      - name: Upload npm logs (for debugging)
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ inputs.runtime_tag }}
-          name: "n8n Runtime ${{ inputs.runtime_tag }}"
-          body: |
-            ## n8n Runtime for Agent n8On
-            - n8n: ${{ inputs.n8n_version }}
-            - Node.js: ${{ inputs.node_version }}
-            - SHA256: ${{ steps.hash.outputs.sha256 }}
+          name: npm-logs
+          path: |
+            npm-install.log
+            npm-install-retry.log
+            C:\Users\runneradmin\AppData\Local\npm-cache\_logs\*
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
           files: |
             n8n-runtime-win64.zip
-            n8n-runtime-win64.zip.sha256
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            sha256.txt
+          body: |
+            ## n8n Runtime for Windows x64
+            
+            - n8n version: ${{ env.N8N_VERSION }}
+            - Node.js version: ${{ env.NODE_VERSION }}
+            - Built on: windows-2022 (GitHub Actions)
+            
+            ### SHA256
+            See attached `sha256.txt`
+            
+            ### Usage
+            Download `n8n-runtime-win64.zip` and update `RUNTIME_SHA256` in `installer.rs`.
