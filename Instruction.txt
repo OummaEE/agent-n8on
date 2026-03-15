@@ -1,0 +1,182 @@
+Прочитай ENGINEERING_LOG.md.
+
+Вот архитектура для решения проблем с генерацией n8n workflow. Реализуй её:
+
+---
+
+1. Библиотека валидных блоков (skills/n8n_blocks/)
+
+Вместо генерации узлов мы будем держать их эталонные JSON-скелеты. Агент будет только заполнять ключи parameters и name.
+
+skills/n8n_blocks/http_request.json:
+{
+  "parameters": {
+    "method": "GET",
+    "url": "",
+    "sendHeaders": true,
+    "headerParameters": {
+      "parameters": []
+    },
+    "options": {}
+  },
+  "id": "{uuid}",
+  "name": "HTTP Request",
+  "type": "n8n-nodes-base.httpRequest",
+  "typeVersion": 4.1,
+  "position": [0, 0]
+}
+
+skills/n8n_blocks/code.json:
+{
+  "parameters": {
+    "jsCode": "return $input.all();"
+  },
+  "id": "{uuid}",
+  "name": "Code",
+  "type": "n8n-nodes-base.code",
+  "typeVersion": 2,
+  "position": [0, 0]
+}
+
+---
+
+2. Валидатор связей и ссылок (n8n_validator.py)
+
+import re
+import json
+
+class N8nValidationException(Exception):
+    pass
+
+class N8nValidator:
+    @staticmethod
+    def validate_workflow(workflow_json: dict) -> bool:
+        nodes = workflow_json.get("nodes", [])
+        connections = workflow_json.get("connections", {})
+        
+        node_names = {node["name"] for node in nodes}
+        
+        N8nValidator._validate_schema(workflow_json)
+        N8nValidator._validate_connections(connections, node_names)
+        N8nValidator._validate_data_references(nodes, node_names)
+        
+        return True
+
+    @staticmethod
+    def _validate_schema(workflow_json: dict):
+        if "nodes" not in workflow_json or "connections" not in workflow_json:
+            raise N8nValidationException("Workflow должен содержать ключи 'nodes' и 'connections'.")
+
+    @staticmethod
+    def _validate_connections(connections: dict, node_names: set):
+        for source_node, routing in connections.items():
+            if source_node not in node_names:
+                raise N8nValidationException(f"Connection source '{source_node}' не существует.")
+            
+            for output_index, connections_list in routing.get("main", {}).items():
+                for connection in connections_list:
+                    target_node = connection.get("node")
+                    if target_node not in node_names:
+                        raise N8nValidationException(f"Connection target '{target_node}' не существует.")
+
+    @staticmethod
+    def _validate_data_references(nodes: list, node_names: set):
+        pattern = re.compile(r"\$\('([^']+)'\)")
+        
+        for node in nodes:
+            params_str = json.dumps(node.get("parameters", {}))
+            matches = pattern.findall(params_str)
+            
+            for referenced_node in matches:
+                if referenced_node not in node_names:
+                    raise N8nValidationException(
+                        f"Узел '{node['name']}' ссылается на несуществующий узел '{referenced_node}'."
+                    )
+
+---
+
+3. Генерация Workflow с лимитом попыток (workflow_generator.py)
+
+import logging
+from n8n_validator import N8nValidator, N8nValidationException
+
+MAX_RETRIES = 3
+
+class N8nAgent:
+    def __init__(self, llm_client, template_manager):
+        self.llm = llm_client
+        self.templates = template_manager
+
+    def build_workflow(self, user_intent: str, base_template_name: str) -> dict:
+        base_workflow = self.templates.get_template(base_template_name)
+        attempts = 0
+        current_workflow = base_workflow.copy()
+        last_error = ""
+
+        while attempts < MAX_RETRIES:
+            try:
+                current_workflow = self._generate_parameters(current_workflow, user_intent, last_error)
+                N8nValidator.validate_workflow(current_workflow)
+                logging.info("Workflow успешно прошел валидацию.")
+                return current_workflow
+
+            except N8nValidationException as e:
+                attempts += 1
+                last_error = str(e)
+                logging.warning(f"Попытка {attempts}/{MAX_RETRIES} провалена: {last_error}")
+
+        logging.error("Превышен лимит попыток. Откат к базовому шаблону.")
+        return base_workflow
+
+    def _generate_parameters(self, workflow, intent, error_feedback):
+        pass
+
+---
+
+4. Тесты (test_validator.py)
+
+import pytest
+from n8n_validator import N8nValidator, N8nValidationException
+
+@pytest.fixture
+def valid_workflow():
+    return {
+        "nodes": [
+            {"name": "Webhook", "parameters": {}},
+            {"name": "Set Data", "parameters": {"value": "={{ $('Webhook').item.json.query }}"}}
+        ],
+        "connections": {
+            "Webhook": {
+                "main": [[{"node": "Set Data", "type": "main", "index": 0}]]
+            }
+        }
+    }
+
+def test_valid_workflow(valid_workflow):
+    assert N8nValidator.validate_workflow(valid_workflow) is True
+
+def test_invalid_connection_target(valid_workflow):
+    valid_workflow["connections"]["Webhook"]["main"][0][0]["node"] = "GhostNode"
+    with pytest.raises(N8nValidationException, match="Connection target 'GhostNode' не существует"):
+        N8nValidator.validate_workflow(valid_workflow)
+
+def test_invalid_data_reference(valid_workflow):
+    valid_workflow["nodes"][1]["parameters"]["value"] = "={{ $('OldWebhook').item.json.query }}"
+    with pytest.raises(N8nValidationException, match="ссылается на несуществующий узел 'OldWebhook'"):
+        N8nValidator.validate_workflow(valid_workflow)
+
+def test_missing_schema_keys():
+    bad_json = {"nodes": []}
+    with pytest.raises(N8nValidationException, match="должен содержать ключи 'nodes' и 'connections'"):
+        N8nValidator.validate_workflow(bad_json)
+
+---
+
+Дополнительно:
+1. Исправь _validate_connections — routing["main"] это список списков, не словарь
+2. Добавь больше блоков в skills/n8n_blocks/: Set, IF, Switch, Webhook, Schedule Trigger, Merge
+3. Добавь валидацию typeVersion — проверяй что версия узла совместима с параметрами
+4. Интегрируй в существующий flow генерации workflow
+5. Прогони все тесты — старые должны остаться зелёными
+
+Логируй в ENGINEERING_LOG.md.

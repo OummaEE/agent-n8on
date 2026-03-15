@@ -1,0 +1,86 @@
+# ============================================================
+#  .gitignore — Facebook Event Scraper
+#  КРИТИЧЕСКИ ВАЖНО: эти файлы никогда не попадут в репозиторий
+# ============================================================
+
+# --- Личные данные и секреты ---
+.env
+*.env
+!.env.example
+
+# --- Результаты скрейпинга ---
+events.csv
+events_*.csv
+output/
+results/
+
+# --- Файл состояния (содержит виденные post_url) ---
+state.json
+
+# --- Профиль браузера (содержит куки, сессии, пароли!) ---
+chrome_profile/
+browser_profile/
+user_data/
+playwright_profile/
+*_profile/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+*.so
+
+# --- Виртуальное окружение ---
+venv/
+.venv/
+env/
+.env/
+ENV/
+env.bak/
+venv.bak/
+virtualenv/
+
+# --- Логи ---
+*.log
+logs/
+scraper.log
+error.log
+
+# --- Временные файлы playwright ---
+playwright-report/
+test-results/
+.playwright/
+
+# --- IDE и редакторы ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# --- pip и пакеты ---
+*.egg-info/
+dist/
+build/
+.eggs/
+pip-log.txt
+
+# --- pytest ---
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+
+# --- Скриншоты и дампы (могут содержать личные данные) ---
+screenshots/
+*.png
+*.jpg
+*.jpeg
+*.har

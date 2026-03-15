@@ -1,0 +1,123 @@
+{
+  "_meta": {
+    "id": "facebook_scraper",
+    "name": "Facebook Group Scraper",
+    "description": "Runs the facebook-scrapper Python CLI, reads event results from CSV. SETUP REQUIRED: install facebook-scrapper dependencies, configure .env with CHROME_USER_DATA_DIR and OPENAI_API_KEY before running.",
+    "keywords": [
+      "facebook", "fb", "фейсбук", "facebook groups", "facebook events",
+      "группы facebook", "парсинг facebook", "fb groups", "facebook scraper",
+      "мероприятия facebook", "события facebook", "scrape facebook",
+      "парсить facebook", "собирать посты facebook"
+    ],
+    "required_params": ["GROUP_URLS", "SCRIPT_DIR"],
+    "optional_params": ["OUTPUT_FILE", "WORKFLOW_NAME"]
+  },
+  "name": "{{WORKFLOW_NAME}}",
+  "nodes": [
+    {
+      "id": "node-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {}
+    },
+    {
+      "id": "node-run-scraper",
+      "name": "Run Facebook Scraper",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "parameters": {
+        "command": "cd \"{{SCRIPT_DIR}}\" && python main.py --headless --force --groups \"{{GROUP_URLS}}\" --output \"{{OUTPUT_FILE}}\""
+      }
+    },
+    {
+      "id": "node-check-result",
+      "name": "Check Exit Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "parameters": {
+        "jsCode": "// Check that the scraper exited cleanly.\nconst item = items[0];\nconst exitCode = item.json.exitCode;\nconst stderr = item.json.stderr || '';\nconst stdout = item.json.stdout || '';\n\nif (exitCode !== 0) {\n  throw new Error(`Facebook scraper failed (exit ${exitCode}). stderr: ${stderr.slice(0, 500)}`);\n}\n\nreturn [{ json: { exitCode, stdout: stdout.slice(-2000), stderr: stderr.slice(-500), scraper_ok: true } }];"
+      }
+    },
+    {
+      "id": "node-read-csv",
+      "name": "Read CSV Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300],
+      "parameters": {
+        "jsCode": "// Read the CSV file produced by the scraper.\nconst fs = require('fs');\nconst path = require('path');\n\nconst scriptDir = '{{SCRIPT_DIR}}';\nconst outputFile = '{{OUTPUT_FILE}}';\nconst fullPath = path.isAbsolute(outputFile) ? outputFile : path.join(scriptDir, outputFile);\n\nif (!fs.existsSync(fullPath)) {\n  return [{ json: { events: [], count: 0, message: `Output file not found: ${fullPath}` } }];\n}\n\nconst raw = fs.readFileSync(fullPath, 'utf8');\nreturn [{ json: { csv_raw: raw, file_path: fullPath } }];"
+      }
+    },
+    {
+      "id": "node-parse-csv",
+      "name": "Parse Events",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300],
+      "parameters": {
+        "jsCode": "// Parse CSV rows into event objects.\nconst csvRaw = items[0].json.csv_raw || '';\nif (!csvRaw.trim()) {\n  return [{ json: { events: [], count: 0 } }];\n}\n\nconst lines = csvRaw.split('\\n').filter(l => l.trim());\nif (lines.length < 2) {\n  return [{ json: { events: [], count: 0 } }];\n}\n\n// Parse header\nconst header = lines[0].split(',').map(h => h.trim().replace(/^\"|\"$/g, ''));\n\nconst events = [];\nfor (let i = 1; i < lines.length; i++) {\n  const cols = [];\n  let cur = '';\n  let inQuote = false;\n  for (const ch of lines[i]) {\n    if (ch === '\"') { inQuote = !inQuote; }\n    else if (ch === ',' && !inQuote) { cols.push(cur); cur = ''; }\n    else { cur += ch; }\n  }\n  cols.push(cur);\n  if (cols.length < 2) continue;\n  const obj = {};\n  header.forEach((h, idx) => { obj[h] = (cols[idx] || '').trim(); });\n  events.push(obj);\n}\n\nreturn [{ json: { events, count: events.length } }];"
+      }
+    },
+    {
+      "id": "node-summary",
+      "name": "Build Summary",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1340, 300],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-count",
+              "name": "events_found",
+              "value": "={{ $json.count }}",
+              "type": "number"
+            },
+            {
+              "id": "assign-events",
+              "name": "events",
+              "value": "={{ $json.events }}",
+              "type": "array"
+            },
+            {
+              "id": "assign-groups",
+              "name": "groups_scraped",
+              "value": "={{  '{{GROUP_URLS}}'.split(',').length }}",
+              "type": "number"
+            },
+            {
+              "id": "assign-scraped-at",
+              "name": "scraped_at",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{"node": "Run Facebook Scraper", "type": "main", "index": 0}]]
+    },
+    "Run Facebook Scraper": {
+      "main": [[{"node": "Check Exit Code", "type": "main", "index": 0}]]
+    },
+    "Check Exit Code": {
+      "main": [[{"node": "Read CSV Output", "type": "main", "index": 0}]]
+    },
+    "Read CSV Output": {
+      "main": [[{"node": "Parse Events", "type": "main", "index": 0}]]
+    },
+    "Parse Events": {
+      "main": [[{"node": "Build Summary", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "parameters": {
+    "mode": "rules",
+    "rules": {
+      "rules": []
+    },
+    "options": {}
+  },
+  "id": "{uuid}",
+  "name": "Switch",
+  "type": "n8n-nodes-base.switch",
+  "typeVersion": 3,
+  "position": [0, 0]
+}

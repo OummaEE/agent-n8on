@@ -1,0 +1,16 @@
+{
+  "parameters": {
+    "source": "database",
+    "workflowId": {
+      "__rl": true,
+      "value": "",
+      "mode": "id"
+    },
+    "options": {}
+  },
+  "id": "{uuid}",
+  "name": "Execute Workflow",
+  "type": "n8n-nodes-base.executeWorkflow",
+  "typeVersion": 1.1,
+  "position": [0, 0]
+}

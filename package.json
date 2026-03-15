@@ -1,0 +1,17 @@
+{
+  "name": "agent-n8on",
+  "version": "1.0.0",
+  "description": "Local AI Assistant powered by Ollama",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "icons": "tauri icon ui/source-icon.png"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^1.5.11"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^1.5.3"
+  }
+}

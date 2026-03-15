@@ -1,0 +1,133 @@
+name: Build n8n Runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      n8n_version:
+        description: 'n8n version'
+        required: true
+        default: '2.11.3'
+      node_version:
+        description: 'Node.js version'
+        required: true
+        default: '20.11.0'
+      runtime_tag:
+        description: 'Release tag (e.g., runtime-v1.0.0)'
+        required: true
+        default: 'runtime-v1.0.0'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Pin npm version (avoid 10.9.x bugs)
+        run: npm install -g npm@10.8.2
+
+      - name: Create runtime structure
+        run: |
+          mkdir runtime
+          mkdir runtime\node
+          mkdir runtime\n8n
+
+      - name: Download portable Node.js
+        shell: pwsh
+        run: |
+          $nodeVersion = "${{ inputs.node_version }}"
+          $url = "https://nodejs.org/dist/v$nodeVersion/node-v$nodeVersion-win-x64.zip"
+          Write-Host "Downloading Node.js from $url"
+          Invoke-WebRequest -Uri $url -OutFile node.zip
+          Expand-Archive -Path node.zip -DestinationPath temp-node
+          Move-Item -Path "temp-node\node-v$nodeVersion-win-x64\*" -Destination "runtime\node"
+          Remove-Item -Path node.zip
+          Remove-Item -Path temp-node -Recurse
+          Write-Host "Node.js extracted to runtime\node"
+
+      - name: Verify node.exe exists
+        shell: pwsh
+        run: |
+          if (-Not (Test-Path "runtime\node\node.exe")) {
+            Write-Error "node.exe not found!"
+            exit 1
+          }
+          & "runtime\node\node.exe" --version
+
+      - name: Install n8n
+        shell: pwsh
+        run: |
+          npm install n8n@${{ inputs.n8n_version }} --prefix ./runtime/n8n --omit=dev --no-audit --no-fund --legacy-peer-deps
+        env:
+          npm_config_loglevel: warn
+
+      - name: Verify n8n bin exists
+        shell: pwsh
+        run: |
+          $n8nBin = "runtime\n8n\node_modules\n8n\bin\n8n"
+          if (-Not (Test-Path $n8nBin)) {
+            Write-Error "n8n bin not found at $n8nBin"
+            Get-ChildItem -Path "runtime\n8n" -Recurse -Name "n8n" | Where-Object { $_ -like "*bin*" }
+            exit 1
+          }
+          Write-Host "n8n bin found at $n8nBin"
+
+      - name: Create version manifest
+        shell: pwsh
+        run: |
+          $manifest = @{
+            n8n_version  = "${{ inputs.n8n_version }}"
+            node_version = "${{ inputs.node_version }}"
+            npm_version  = "10.8.2"
+            runtime_tag  = "${{ inputs.runtime_tag }}"
+            built_at     = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
+            paths        = @{
+              node_exe = "node\node.exe"
+              n8n_bin  = "n8n\node_modules\n8n\bin\n8n"
+            }
+          }
+          $manifest | ConvertTo-Json -Depth 3 | Out-File -FilePath runtime\manifest.json -Encoding UTF8
+
+      - name: Archive runtime
+        shell: pwsh
+        run: Compress-Archive -Path ./runtime/* -DestinationPath n8n-runtime-win64.zip -CompressionLevel Optimal
+
+      - name: Get archive size
+        shell: pwsh
+        run: |
+          $size = (Get-Item n8n-runtime-win64.zip).Length / 1MB
+          Write-Host "Archive size: $([math]::Round($size, 2)) MB"
+
+      - name: Calculate SHA256
+        id: hash
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash -Path n8n-runtime-win64.zip -Algorithm SHA256).Hash
+          Write-Host "SHA256: $hash"
+          echo "sha256=$hash" >> $env:GITHUB_OUTPUT
+          $hash | Out-File -FilePath n8n-runtime-win64.zip.sha256 -Encoding UTF8
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: n8n-runtime-win64
+          path: n8n-runtime-win64.zip
+          retention-days: 30
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ inputs.runtime_tag }}
+          name: "n8n Runtime ${{ inputs.runtime_tag }}"
+          body: |
+            ## n8n Runtime for Agent n8On
+            - n8n: ${{ inputs.n8n_version }}
+            - Node.js: ${{ inputs.node_version }}
+            - SHA256: ${{ steps.hash.outputs.sha256 }}
+          files: |
+            n8n-runtime-win64.zip
+            n8n-runtime-win64.zip.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

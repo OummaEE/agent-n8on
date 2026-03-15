@@ -1,0 +1,107 @@
+{
+  "_meta": {
+    "id": "social_parser",
+    "name": "Social Parser",
+    "description": "Collects posts from social media platforms (Telegram, Twitter/X, Instagram, Reddit) via RSSHub and saves results",
+    "keywords": [
+      "social", "parser", "social parser", "social-parser",
+      "парсинг", "парсер", "собирать посты", "парсить",
+      "соцсети", "social media", "социальные сети",
+      "telegram", "телеграм", "instagram", "инстаграм",
+      "twitter", "твиттер", "reddit", "реддит",
+      "посты", "posts", "канал", "channel", "аккаунт", "account"
+    ],
+    "required_params": ["PLATFORM", "TARGET"],
+    "optional_params": ["OUTPUT", "WORKFLOW_NAME", "SCHEDULE_INTERVAL"]
+  },
+  "name": "{{WORKFLOW_NAME}}",
+  "nodes": [
+    {
+      "id": "node-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {}
+    },
+    {
+      "id": "node-build-url",
+      "name": "Build API URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "jsCode": "// Build platform-specific RSS/API URL from PLATFORM and TARGET.\nconst platform = '{{PLATFORM}}'.toLowerCase().trim();\nconst rawTarget = '{{TARGET}}';\nconst target = rawTarget.replace(/^[@#]/, '').trim();\n\nlet url;\nif (platform === 'telegram') {\n  url = `https://rsshub.app/telegram/channel/${target}`;\n} else if (platform === 'twitter' || platform === 'x') {\n  url = `https://rsshub.app/twitter/user/${target}`;\n} else if (platform === 'instagram') {\n  url = `https://rsshub.app/instagram/user/${target}`;\n} else if (platform === 'reddit') {\n  url = `https://www.reddit.com/r/${target}/.rss`;\n} else {\n  // Generic fallback: treat as rsshub path\n  url = `https://rsshub.app/${platform}/${target}`;\n}\n\nreturn [{ json: { url, platform, target, fetched_at: new Date().toISOString() } }];"
+      }
+    },
+    {
+      "id": "node-fetch",
+      "name": "Fetch Posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Build API URL').first().json.url }}",
+        "authentication": "none",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "node-parse",
+      "name": "Parse Posts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300],
+      "parameters": {
+        "jsCode": "// Parse RSS/Atom/JSON response into a standard post format.\nconst platform = '{{PLATFORM}}'.toLowerCase();\nconst target = '{{TARGET}}';\n\n// Helper: strip HTML tags.\nfunction stripHtml(html) {\n  return (html || '').replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim();\n}\n\nconst parsed = [];\nfor (const item of items) {\n  const body = item.json;\n  // RSS body is a string (XML) from httpRequest; attempt to parse.\n  let posts = [];\n  if (typeof body === 'string') {\n    // Simple regex extraction of <item> blocks.\n    const itemBlocks = body.match(/<item[\\s\\S]*?<\\/item>/gi) || [];\n    for (const block of itemBlocks) {\n      const getTag = (tag) => {\n        const m = block.match(new RegExp(`<${tag}[^>]*><!\\\\[CDATA\\\\[([\\\\s\\\\S]*?)\\\\]\\\\]><\\/${tag}>|<${tag}[^>]*>([^<]*)<\\/${tag}>`, 'i'));\n        return m ? (m[1] || m[2] || '').trim() : '';\n      };\n      posts.push({\n        id: getTag('guid') || getTag('link'),\n        title: stripHtml(getTag('title')),\n        link: getTag('link') || getTag('guid'),\n        content: stripHtml(getTag('description') || getTag('content:encoded')),\n        published_at: getTag('pubDate') || getTag('dc:date') || new Date().toISOString(),\n        platform,\n        source: target,\n      });\n    }\n  } else if (body && body.items) {\n    // Already parsed (JSON feed format).\n    posts = body.items.map((p) => ({\n      id: p.id || p.url,\n      title: stripHtml(p.title || ''),\n      link: p.url || p.id,\n      content: stripHtml(p.content_html || p.content_text || p.summary || ''),\n      published_at: p.date_published || new Date().toISOString(),\n      platform,\n      source: target,\n    }));\n  }\n  parsed.push(...posts.map((p) => ({ json: p })));\n}\n\nreturn parsed.length > 0 ? parsed : [{ json: { message: 'No posts parsed', platform, source: target } }];"
+      }
+    },
+    {
+      "id": "node-filter",
+      "name": "Filter New Posts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300],
+      "parameters": {
+        "jsCode": "// Deduplicate: only pass through posts not seen before.\nconst fs = require('fs');\nconst platform = '{{PLATFORM}}';\nconst rawTarget = '{{TARGET}}'.replace(/^[@#]/, '');\nconst stateFile = `/tmp/social_parser_${platform}_${rawTarget}.json`;\n\nlet seen = new Set();\ntry {\n  if (fs.existsSync(stateFile)) {\n    const data = JSON.parse(fs.readFileSync(stateFile, 'utf8'));\n    seen = new Set(data.ids || []);\n  }\n} catch (e) {\n  // State file unreadable — treat all posts as new.\n}\n\nconst newItems = items.filter((item) => {\n  const id = item.json.id || item.json.link || item.json.title;\n  return id && !seen.has(id);\n});\n\n// Persist updated seen IDs (keep last 2000).\nconst newIds = newItems.map((i) => i.json.id || i.json.link || i.json.title).filter(Boolean);\nnewIds.forEach((id) => seen.add(id));\ntry {\n  fs.writeFileSync(stateFile, JSON.stringify({ ids: [...seen].slice(-2000) }));\n} catch (e) {\n  console.error('State save error:', e.message);\n}\n\nif (newItems.length === 0) {\n  return [{ json: { message: 'No new posts', platform, checked_at: new Date().toISOString() } }];\n}\nreturn newItems;"
+      }
+    },
+    {
+      "id": "node-save",
+      "name": "Save Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300],
+      "parameters": {
+        "jsCode": "// Save results to file or just return them.\nconst fs = require('fs');\nconst outputPath = '{{OUTPUT}}';\n\nif (outputPath && outputPath !== 'none' && outputPath !== '') {\n  try {\n    const lines = items.map((i) => JSON.stringify(i.json)).join('\\n');\n    fs.appendFileSync(outputPath, lines + '\\n');\n    console.log(`Saved ${items.length} item(s) to ${outputPath}`);\n  } catch (e) {\n    console.error('File write error:', e.message);\n  }\n} else {\n  console.log(`Social parser result: ${items.length} item(s)`);\n  items.forEach((i) => console.log(JSON.stringify(i.json)));\n}\nreturn items;"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{"node": "Build API URL", "type": "main", "index": 0}]]
+    },
+    "Build API URL": {
+      "main": [[{"node": "Fetch Posts", "type": "main", "index": 0}]]
+    },
+    "Fetch Posts": {
+      "main": [[{"node": "Parse Posts", "type": "main", "index": 0}]]
+    },
+    "Parse Posts": {
+      "main": [[{"node": "Filter New Posts", "type": "main", "index": 0}]]
+    },
+    "Filter New Posts": {
+      "main": [[{"node": "Save Output", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

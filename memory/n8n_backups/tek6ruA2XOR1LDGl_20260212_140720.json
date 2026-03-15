@@ -1,0 +1,639 @@
+{
+  "updatedAt": "2026-02-12T12:57:30.503Z",
+  "createdAt": "2025-11-21T11:17:22.007Z",
+  "id": "tek6ruA2XOR1LDGl",
+  "name": "My workflow",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "80e7a92e-455e-4443-bd96-f3759d73e672",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://nhdyzznfitwlbcaaacwx.supabase.co/rest/v1/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5oZHl6em5maXR3bGJjYWFhY3d4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2NDU2ODksImV4cCI6MjA3OTIyMTY4OX0.5bscSqZZRf18sEM6DL_xNnGXlezgm53embdCyRivNLI"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5oZHl6em5maXR3bGJjYWFhY3d4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzY0NTY4OSwiZXhwIjoyMDc5MjIxNjg5fQ.2X-QB58Tpc8OlP7HA0s81Q8dzmeGkAsl6Gzpmn1IsUM"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n    \"title_sv\": \"Testevent via n8n\",\n    \"title_en\": \"Test event via n8n\",\n    \"title_ru\": \"Тестовое событие через n8n\",\n    \"title_so\": \"Tijaabo dhacdo n8n\",\n    \"title_ar\": \"فعالية تجريبية عبر n8n\",\n    \"title_uk\": \"Тестова подія через n8n\",\n    \"description_sv\": \"Det här är ett testevenemang som skapats via n8n.\",\n    \"description_en\": \"This is a test event created via n8n.\",\n    \"description_ru\": \"Это тестовое событие, созданное через n8n.\",\n    \"description_so\": \"Tani waa dhacdo tijaabo ah oo laga sameeyay n8n.\",\n    \"description_ar\": \"هذه فعالية تجريبية تم إنشاؤها عبر n8n.\",\n    \"description_uk\": \"Це тестова подія, створена через n8n.\",\n    \"date\": \"2025-12-01\",\n    \"time\": \"18:00\",\n    \"city\": \"Flen\",\n    \"location\": \"Flen centrum\",\n    \"link\": \"https://visitflen.se/evenemang\",\n    \"ticket_link\": null,\n    \"category\": \"music\",\n    \"event_type\": \"indoor\",\n    \"age_group\": \"all\",\n    \"is_free\": true,\n    \"price\": null,\n    \"is_kids_friendly\": true,\n    \"is_sponsored\": false,\n    \"sponsor_id\": null,\n    \"approval_status\": \"pending\",\n   \n    \"image\": null\n  }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        352,
+        -240
+      ],
+      "id": "1c92c6be-98a3-46f2-aa55-fc9376b58baf",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-free.deepl.com/v2/translate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "67c0d8c0-7e53-4f41-a408-1c1570f8a2c1:fx"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": [\n    {{ JSON.stringify($json.title_sv) }},\n    {{ JSON.stringify($json.description_sv) }}\n  ],\n  \"target_lang\": \"EN\"\n}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1936,
+        160
+      ],
+      "id": "f4ce6482-d908-4fb1-b329-f3fe5f71d27f",
+      "name": "DeepL EN"
+    },
+    {
+      "parameters": {
+        "url": "=https://visitflen.se{{ $json.link }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "927495e3-f2ea-48ba-a0e6-6dc8207f1359",
+      "name": "Get from link"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "link, location",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        832,
+        0
+      ],
+      "id": "1509d26e-2311-492d-9135-4b51fc899ddd",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "url": "=https://visitflen.se/evenemang?page={{ $json.page }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        416,
+        0
+      ],
+      "id": "4c02167b-ccc3-4593-b317-b6da88cf5487",
+      "name": "Get whole info from page"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "link",
+              "cssSelector": ".vf-event-card__link",
+              "returnValue": "attribute",
+              "attribute": "href",
+              "returnArray": true
+            },
+            {
+              "key": "location",
+              "cssSelector": ".vf-event-card__area-text",
+              "returnArray": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        624,
+        0
+      ],
+      "id": "8fe93044-6c95-4ec6-9253-4d1dfba9cb19",
+      "name": "HTML info"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "title_sv",
+              "cssSelector": "h1.heading"
+            },
+            {
+              "key": "description_sv",
+              "cssSelector": "main .sv-font-ingress",
+              "returnValue": "html"
+            },
+            {
+              "key": "time",
+              "cssSelector": ".sv-font-fet-brodtext"
+            },
+            {
+              "key": "date",
+              "cssSelector": "main .vf-event-top__date"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        1248,
+        0
+      ],
+      "id": "2d4750c7-a909-4307-a366-0ed6e58a5678",
+      "name": "HTML"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Мы создаем список страниц с 0 по 4 (всего 5 страниц)\nreturn [\n  { json: { page: 0 } },\n  { json: { page: 1 } },\n  { json: { page: 2 } },\n  { json: { page: 3 } },\n  { json: { page: 4 } }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "694555b3-003d-4419-a9ea-e94b505d1913",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1504,
+        80
+      ],
+      "id": "442c5a41-0477-442c-b0ba-fc10b88d3172",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "const monthsSV = {\n  \"januari\": \"01\", \"februari\": \"02\", \"mars\": \"03\", \"april\": \"04\", \"maj\": \"05\", \"juni\": \"06\",\n  \"juli\": \"07\", \"augusti\": \"08\", \"september\": \"09\", \"oktober\": \"10\", \"november\": \"11\", \"december\": \"12\",\n  \"sep\": \"09\", \"nov\": \"11\", \"dec\": \"12\", \"jan\": \"01\", \"feb\": \"02\", \"okt\": \"10\"\n};\n\nfor (const item of $input.all()) {\n  try {\n    const json = item.json;\n    console.log(`Processing: ${json.title_sv}`);\n\n    // --- ПОДГОТОВКА ТЕКСТА ДЛЯ АНАЛИЗА ---\n    let rawText = ((json.title_sv || \"\") + \" \" + (json.description_sv || \"\")).toLowerCase();\n\n    // --- 1. ПРОВЕРКА НА БЕСПЛАТНОСТЬ (НОВОЕ!) ---\n    // По умолчанию считаем бесплатным\n    json.is_free = true; \n    json.price = \"\"; // Очищаем цену\n\n    // Слова, указывающие на то, что это ПЛАТНОЕ событие (еда, билеты, цены)\n    const paidKeywords = [\n      \"julbord\", \"buffé\", \"entré\", \"biljett\", \"pris:\", \"kr/pers\", \"kostnad\", \n      \"meny\", \"servering\", \"avgift\", \"sek\", \"kronor\"\n    ];\n\n    // Слова-исключения (если написано \"fri entré\" - вход свободный, даже если есть слово entré)\n    const freeKeywords = [\"fri entré\", \"gratis\", \"ingen avgift\"];\n\n    // Если нашли слово \"платно\" И НЕ нашли слово \"бесплатно\" -> ставим is_free = false\n    if (paidKeywords.some(word => rawText.includes(word)) && !freeKeywords.some(word => rawText.includes(word))) {\n        json.is_free = false;\n        // Можно добавить заглушку цены, если нужно\n        // json.price = \"Se hemsida\"; \n    }\n    // ----------------------------------------\n\n    json.approval_status = \"approved\"; \n\n    // --- 2. ГОРОД ---\n    const locationLower = (json.location || \"\").toLowerCase();\n    if (locationLower.includes(\"flen\")) json.city = \"Flen\";\n    else if (locationLower.includes(\"katrineholm\")) json.city = \"Katrineholm\";\n    else if (locationLower.includes(\"eskilstuna\")) json.city = \"Eskilstuna\";\n    else if (locationLower.includes(\"strängnäs\") || locationLower.includes(\"strangnas\")) json.city = \"Strängnäs\";\n    else if (locationLower.includes(\"nyköping\") || locationLower.includes(\"nykoping\")) json.city = \"Nyköping\";\n    else if (locationLower.includes(\"gnesta\")) json.city = \"Gnesta\";\n    else if (locationLower.includes(\"sparreholm\")) json.city = \"Sparreholm\";\n    else if (locationLower.includes(\"malmköping\") || locationLower.includes(\"malmkoping\")) json.city = \"Malmköping\";\n    else if (locationLower.includes(\"hälleforsnäs\")) json.city = \"Hälleforsnäs\";\n    else if (locationLower.includes(\"vadsbro\")) json.city = \"Vadsbro\";\n    else if (locationLower.includes(\"årdala\")) json.city = \"Årdala\";\n    else json.city = \"Flen\"; \n\n    // --- 3. ДАТА ---\n    try {\n      let dateStr = (json.date || \"\").trim().toLowerCase(); \n      const singleMonthRange = dateStr.match(/^(\\d+)\\s*-\\s*\\d+\\s+([a-zåäö]+)/i);\n      if (singleMonthRange) {\n          dateStr = `${singleMonthRange[1]} ${singleMonthRange[2]}`;\n      } else if (dateStr.includes(\"-\")) {\n          dateStr = dateStr.split(\"-\")[0].trim();\n      }\n      const parts = dateStr.split(\" \");\n      if (parts.length >= 2) {\n        let day = parts[0].replace(/[^0-9]/g, \"\");\n        if (day.length === 1) day = \"0\" + day;\n        const monthName = parts[1].trim();\n        const month = monthsSV[monthName];\n        if (day && month) {\n          const now = new Date();\n          let year = now.getFullYear();\n          const currentMonth = now.getMonth() + 1;\n          if (parseInt(month) < currentMonth && currentMonth > 8) year = year + 1;\n          json.date = `${year}-${month}-${day}`;\n        } else json.date = null;\n      } else json.date = null;\n    } catch (e) { json.date = null; }\n\n    // --- 4. КАТЕГОРИИ ---\n    let category = \"other\";\n    if (rawText.includes(\"musik\") || rawText.includes(\"konsert\") || rawText.includes(\"kör\") || rawText.includes(\"jazz\") || rawText.includes(\"allsång\")) category = \"music\";\n    else if (rawText.includes(\"barn\") || rawText.includes(\"familj\") || rawText.includes(\"sagostund\")) category = \"kids\";\n    else if (rawText.includes(\"mat\") || rawText.includes(\"dryck\") || rawText.includes(\"julbord\") || rawText.includes(\"fika\") || rawText.includes(\"lunch\")) category = \"food\";\n    else if (rawText.includes(\"sport\") || rawText.includes(\"lopp\") || rawText.includes(\"träning\") || rawText.includes(\"yoga\")) category = \"sport\";\n    else if (rawText.includes(\"konst\") || rawText.includes(\"utställning\") || rawText.includes(\"bio\") || rawText.includes(\"teater\") || rawText.includes(\"museum\")) category = \"culture\";\n    else if (rawText.includes(\"verkstad\") || rawText.includes(\"workshop\") || rawText.includes(\"pyssel\") || rawText.includes(\"slöjd\")) category = \"workshop\";\n    else if (rawText.includes(\"vandring\") || rawText.includes(\"natur\") || rawText.includes(\"ute\") || rawText.includes(\"promenad\")) category = \"outdoors\";\n    json.category = category;\n\n    // --- 5. ОПРЕДЕЛЕНИЕ ВОЗРАСТА ---\n    let age_group = \"all\"; \n    const adultKeywords = [\"18+\", \"18 år\", \"alkohol\", \"vin\", \"öl\", \"pub\", \"senior\", \"vuxen\", \"vuxna\", \"aw\", \"afterwork\"];\n    const teenKeywords = [\"ungdom\", \"tonår\", \"13+\", \"15+\", \"högstad\", \"gymnas\", \"epa\"];\n    const kidsKeywords = [\"barn\", \"familj\", \"knatte\", \"saga\", \"sagostund\", \"pyssel\", \"lek\", \"bebis\", \"0-\", \"3-\"];\n\n    if (adultKeywords.some(word => rawText.includes(word))) {\n        age_group = \"adults\";\n    } else if (teenKeywords.some(word => rawText.includes(word))) {\n        age_group = \"teens\";\n    } else if (category === \"kids\" || kidsKeywords.some(word => rawText.includes(word))) {\n        age_group = \"kids\";\n    }\n    json.age_group = age_group;\n\n    // Уникальный ключ и чистка\n    json.unique_key = (json.title_sv || \"no_title\") + \"_\" + (json.date || \"no_date\");\n    if (json.title_sv) json.title_sv = json.title_sv.trim();\n    if (json.description_sv) json.description_sv = json.description_sv.trim();\n\n  } catch (error) {\n    console.error('Error processing event:', error);\n    item.json.error = error.message;\n  }\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1712,
+        80
+      ],
+      "id": "5695e41f-86a5-4f9b-a1a7-f2e11fb5c031",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-free.deepl.com/v2/translate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "DeepL-Auth-Key 34f10e8e-7ec4-424f-9f96-1b60bd4d559d:fx"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": [\n    {{ JSON.stringify($('Code in JavaScript1').item.json.title_sv) }},\n    {{ JSON.stringify($('Code in JavaScript1').item.json.description_sv) }}\n  ],\n  \"target_lang\": \"RU\"\n}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2128,
+        160
+      ],
+      "id": "3129fcd0-88da-43d6-906b-272668851307",
+      "name": "DeepL RU"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-free.deepl.com/v2/translate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "DeepL-Auth-Key 34f10e8e-7ec4-424f-9f96-1b60bd4d559d:fx"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": [\n    {{ JSON.stringify($('Code in JavaScript1').item.json.title_sv) }},\n    {{ JSON.stringify($('Code in JavaScript1').item.json.description_sv) }}\n  ],\n  \"target_lang\": \"AR\"\n}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2288,
+        160
+      ],
+      "id": "dcd18186-f2be-4ba0-ac24-4ba0f7eeda46",
+      "name": "DeepL AR"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-free.deepl.com/v2/translate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "DeepL-Auth-Key 34f10e8e-7ec4-424f-9f96-1b60bd4d559d:fx"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": [\n    {{ JSON.stringify($('Code in JavaScript1').item.json.title_sv) }},\n    {{ JSON.stringify($('Code in JavaScript1').item.json.description_sv) }}\n  ],\n  \"target_lang\": \"UK\"\n}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2448,
+        160
+      ],
+      "id": "85e07899-907c-4db6-a066-4701eaba489f",
+      "name": "DeepL UK"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://nhdyzznfitwlbcaaacwx.supabase.co/rest/v1/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5oZHl6em5maXR3bGJjYWFhY3d4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzY0NTY4OSwiZXhwIjoyMDc5MjIxNjg5fQ.2X-QB58Tpc8OlP7HA0s81Q8dzmeGkAsl6Gzpmn1IsUM"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5oZHl6em5maXR3bGJjYWFhY3d4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzY0NTY4OSwiZXhwIjoyMDc5MjIxNjg5fQ.2X-QB58Tpc8OlP7HA0s81Q8dzmeGkAsl6Gzpmn1IsUM"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=ignore-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"title_sv\": {{ JSON.stringify($('Code in JavaScript1').item.json.title_sv || \"\") }},\n  \"description_sv\": {{ JSON.stringify($('Code in JavaScript1').item.json.description_sv || \"\") }},\n\n  \"title_en\": {{ JSON.stringify($('DeepL EN').item.json.translations?.[0]?.text || \"\") }},\n  \"description_en\": {{ JSON.stringify($('DeepL EN').item.json.translations?.[1]?.text || \"\") }},\n\n  \"title_ru\": {{ JSON.stringify($('DeepL RU').item.json.translations?.[0]?.text || \"\") }},\n  \"description_ru\": {{ JSON.stringify($('DeepL RU').item.json.translations?.[1]?.text || \"\") }},\n\n  \"title_ar\": {{ JSON.stringify($('DeepL AR').item.json.translations?.[0]?.text || \"\") }},\n  \"description_ar\": {{ JSON.stringify($('DeepL AR').item.json.translations?.[1]?.text || \"\") }},\n\n  \"title_uk\": {{ JSON.stringify($('DeepL UK').item.json.translations?.[0]?.text || \"\") }},\n  \"description_uk\": {{ JSON.stringify($('DeepL UK').item.json.translations?.[1]?.text || \"\") }},\n\n  \"title_so\": {{ JSON.stringify($('Google Translate SO').item.json.data?.translations?.[0]?.translatedText || \"\") }},\n  \"description_so\": {{ JSON.stringify($('Google Translate SO').item.json.data?.translations?.[1]?.translatedText || \"\") }},\n\n  \"date\": {{ JSON.stringify($('Code in JavaScript1').item.json.date || \"\") }},\n  \"time\": {{ JSON.stringify($('Code in JavaScript1').item.json.time || \"\") }},\n  \"city\": {{ JSON.stringify($('Code in JavaScript1').item.json.location || \"\") }},\n  \n  \"location\": {{ JSON.stringify($('Code in JavaScript1').item.json.location || \"\") }},\n  \n  \"link\": {{ JSON.stringify(\"https://visitflen.se\" + ($('Code in JavaScript1').item.json.link || \"\")) }},\n  \"category\": {{ JSON.stringify($('Code in JavaScript1').item.json.category || \"other\") }},\n  \"event_type\": \"other\",\n  \n  \"age_group\": {{ JSON.stringify($('Code in JavaScript1').item.json.category === 'kids' ? \"kids\" : \"all\") }},\n\n  \"is_free\": true,\n  \"source\": \"Evenemang Flen\",\n  \"approval_status\": \"approved\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2816,
+        160
+      ],
+      "id": "4c0ea60b-920f-46f1-89c6-ac6121574fed",
+      "name": "Supabase"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://translation.googleapis.com/language/translate/v2",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "AIzaSyCnS29IKDX1-EvwlYZb4IO7xz3ZYs0vRbY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"q\": [\n    {{ JSON.stringify($('Code in JavaScript1').item.json.title_sv) }},\n    {{ JSON.stringify($('Code in JavaScript1').item.json.description_sv) }}\n  ],\n  \"target\": \"so\",\n  \"source\": \"sv\",\n  \"format\": \"text\"\n}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2608,
+        160
+      ],
+      "id": "1b87ecb6-eacd-459c-8c3b-3e937d346954",
+      "name": "Google Translate SO"
+    }
+  ],
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        []
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Get from link",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get whole info from page": {
+      "main": [
+        [
+          {
+            "node": "HTML info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTML info": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get from link": {
+      "main": [
+        [
+          {
+            "node": "HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Get whole info from page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTML": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "DeepL EN",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepL EN": {
+      "main": [
+        [
+          {
+            "node": "DeepL RU",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepL RU": {
+      "main": [
+        [
+          {
+            "node": "DeepL AR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepL AR": {
+      "main": [
+        [
+          {
+            "node": "DeepL UK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepL UK": {
+      "main": [
+        [
+          {
+            "node": "Google Translate SO",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Translate SO": {
+      "main": [
+        [
+          {
+            "node": "Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "12cc3c03-8e89-4017-b220-e515d99bdfe9",
+  "activeVersionId": null,
+  "versionCounter": 12,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2025-11-21T11:17:22.011Z",
+      "createdAt": "2025-11-21T11:17:22.011Z",
+      "role": "workflow:owner",
+      "workflowId": "tek6ruA2XOR1LDGl",
+      "projectId": "kObFI7a6npBamSbN",
+      "project": {
+        "updatedAt": "2025-11-11T09:32:11.723Z",
+        "createdAt": "2025-11-11T09:26:38.464Z",
+        "id": "kObFI7a6npBamSbN",
+        "name": "Jane Egorova <boostcamp.x@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "fe6c1d0a-4b8b-4de2-8371-10d40041e954",
+        "projectRelations": [
+          {
+            "updatedAt": "2025-11-11T09:26:38.464Z",
+            "createdAt": "2025-11-11T09:26:38.464Z",
+            "userId": "fe6c1d0a-4b8b-4de2-8371-10d40041e954",
+            "projectId": "kObFI7a6npBamSbN",
+            "user": {
+              "updatedAt": "2026-02-12T12:04:28.000Z",
+              "createdAt": "2025-11-11T09:26:38.197Z",
+              "id": "fe6c1d0a-4b8b-4de2-8371-10d40041e954",
+              "email": "boostcamp.x@gmail.com",
+              "firstName": "Jane",
+              "lastName": "Egorova",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2025-11-11T09:33:16.200Z",
+                "personalization_survey_n8n_version": "1.119.1",
+                "companyIndustryExtended": [
+                  "physical-retail-or-services",
+                  "manufacturing-industry"
+                ],
+                "companySize": "<20",
+                "companyType": "other",
+                "role": "business-owner",
+                "reportedSource": "friend"
+              },
+              "settings": {
+                "userActivated": false
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-02-12",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": null
+}

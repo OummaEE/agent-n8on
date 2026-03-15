@@ -1,0 +1,15 @@
+{
+    "enabled": [
+        "kommun_parser",
+        "google_calendar",
+        "telegram_bot",
+        "excel_reports",
+        "boostcamp_crm",
+        "pdf_analyzer",
+        "n8n_templates",
+        "voice_input",
+        "google_drive",
+        "auth_browse"
+    ],
+    "note": "Only skills listed here will be loaded. Remove a name to disable a skill."
+}

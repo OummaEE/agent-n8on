@@ -1,0 +1,15 @@
+{
+  "parameters": {
+    "mode": "manual",
+    "duplicateItem": false,
+    "assignments": {
+      "assignments": []
+    },
+    "options": {}
+  },
+  "id": "{uuid}",
+  "name": "Set",
+  "type": "n8n-nodes-base.set",
+  "typeVersion": 3.4,
+  "position": [0, 0]
+}

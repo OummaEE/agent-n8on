@@ -1,0 +1,11 @@
+{
+  "parameters": {
+    "mode": "append",
+    "options": {}
+  },
+  "id": "{uuid}",
+  "name": "Merge",
+  "type": "n8n-nodes-base.merge",
+  "typeVersion": 3,
+  "position": [0, 0]
+}

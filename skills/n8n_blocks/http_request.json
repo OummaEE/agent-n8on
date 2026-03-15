@@ -1,0 +1,16 @@
+{
+  "parameters": {
+    "method": "GET",
+    "url": "",
+    "sendHeaders": true,
+    "headerParameters": {
+      "parameters": []
+    },
+    "options": {}
+  },
+  "id": "{uuid}",
+  "name": "HTTP Request",
+  "type": "n8n-nodes-base.httpRequest",
+  "typeVersion": 4.1,
+  "position": [0, 0]
+}
