@@ -10,13 +10,13 @@ on:
       node_version:
         description: 'Node.js version'
         required: true
-        default: '20.19.0'
+        default: '22.14.0'
   push:
     tags: ['v*']
 
 env:
   N8N_VERSION: ${{ github.event.inputs.n8n_version || '2.11.3' }}
-  NODE_VERSION: ${{ github.event.inputs.node_version || '20.19.0' }}
+  NODE_VERSION: ${{ github.event.inputs.node_version || '22.14.0' }}
 
 jobs:
   build-runtime:
@@ -132,7 +132,7 @@ jobs:
           Write-Host "This will take 5-15 minutes depending on native module compilation"
           
           # Первая попытка
-          npm install "n8n@${{ env.N8N_VERSION }}" --prefix ./runtime/n8n --omit=dev 2>&1 | Tee-Object -FilePath npm-install.log
+          npm install "n8n@${{ env.N8N_VERSION }}" --prefix ./runtime/n8n --omit=dev --foreground-scripts 2>&1 | Tee-Object -FilePath npm-install.log
           $exitCode = $LASTEXITCODE
           
           if ($exitCode -ne 0) {
@@ -146,8 +146,7 @@ jobs:
               Write-Host "::warning::EPERM/EBUSY detected — retrying with npm cache clean + --force"
               npm cache clean --force
               Start-Sleep -Seconds 5
-              npm install "n8n@${{ env.N8N_VERSION }}" --prefix ./runtime/n8n --omit=dev --force 2>&1 | Tee-Object -FilePath npm-install-retry.log
-              
+              npm install "n8n@${{ env.N8N_VERSION }}" --prefix ./runtime/n8n --omit=dev --foreground-scripts 2>&1 | Tee-Object -FilePath npm-install.log
               if ($LASTEXITCODE -ne 0) {
                 Write-Host "::error::Retry npm install failed with exit code $LASTEXITCODE"
                 Get-Content npm-install-retry.log | Select-Object -Last 50
