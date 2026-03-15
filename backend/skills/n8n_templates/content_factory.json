@@ -1,0 +1,109 @@
+{
+  "_meta": {
+    "id": "content_factory",
+    "name": "Content Factory",
+    "description": "Fetches RSS feed items, rewrites content with AI, saves results to file",
+    "keywords": [
+      "rss", "content", "factory", "content factory", "content-factory",
+      "ai rewrite", "feed", "pipeline",
+      "контент-завод", "контент завод", "фабрик", "пайплайн"
+    ],
+    "required_params": ["FEED_URL"],
+    "optional_params": ["REWRITE_PROMPT", "OUTPUT_FILE", "WORKFLOW_NAME"]
+  },
+  "name": "{{WORKFLOW_NAME}}",
+  "nodes": [
+    {
+      "id": "node-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {}
+    },
+    {
+      "id": "node-rss",
+      "name": "Fetch RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "parameters": {
+        "url": "{{FEED_URL}}"
+      }
+    },
+    {
+      "id": "node-rewrite",
+      "name": "AI Rewrite",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "parameters": {
+        "jsCode": "// AI rewrite step.\n// Replace this Code node with an HTTP Request to OpenAI/Anthropic for production use.\nconst prompt = '{{REWRITE_PROMPT}}';\nreturn items.map(item => ({\n  json: {\n    original_title: item.json.title || '',\n    original_link: item.json.link || '',\n    rewritten_title: '[Rewritten] ' + (item.json.title || ''),\n    rewritten_content: prompt + '\\n\\n' + (item.json.contentSnippet || item.json.content || item.json.summary || ''),\n    processed_at: new Date().toISOString()\n  }\n}));"
+      }
+    },
+    {
+      "id": "node-format",
+      "name": "Format Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [900, 300],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-title",
+              "name": "title",
+              "value": "={{ $json.rewritten_title }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-content",
+              "name": "content",
+              "value": "={{ $json.rewritten_content }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-link",
+              "name": "link",
+              "value": "={{ $json.original_link }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-ts",
+              "name": "processed_at",
+              "value": "={{ $json.processed_at }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-save",
+      "name": "Save to File",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300],
+      "parameters": {
+        "jsCode": "// Save results to file (append mode).\nconst fs = require('fs');\nconst outputPath = '{{OUTPUT_FILE}}';\nif (outputPath && outputPath !== 'none' && outputPath !== '') {\n  try {\n    const lines = items.map(i => JSON.stringify(i.json)).join('\\n');\n    fs.appendFileSync(outputPath, lines + '\\n');\n  } catch (e) {\n    // Non-fatal: file write failure should not stop the pipeline.\n    console.error('File write error:', e.message);\n  }\n}\nreturn items;"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{"node": "Fetch RSS", "type": "main", "index": 0}]]
+    },
+    "Fetch RSS": {
+      "main": [[{"node": "AI Rewrite", "type": "main", "index": 0}]]
+    },
+    "AI Rewrite": {
+      "main": [[{"node": "Format Output", "type": "main", "index": 0}]]
+    },
+    "Format Output": {
+      "main": [[{"node": "Save to File", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

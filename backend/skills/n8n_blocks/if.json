@@ -1,0 +1,19 @@
+{
+  "parameters": {
+    "conditions": {
+      "options": {
+        "caseSensitive": true,
+        "leftValue": "",
+        "typeValidation": "strict"
+      },
+      "conditions": [],
+      "combinator": "and"
+    },
+    "options": {}
+  },
+  "id": "{uuid}",
+  "name": "IF",
+  "type": "n8n-nodes-base.if",
+  "typeVersion": 2,
+  "position": [0, 0]
+}

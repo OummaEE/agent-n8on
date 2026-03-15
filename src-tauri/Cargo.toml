@@ -1,0 +1,39 @@
+[package]
+name = "agent-n8on"
+version = "1.0.0"
+description = "Local AI Assistant"
+authors = ["Agent n8On"]
+license = "MIT"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+tauri = { version = "1.6", features = [
+    "shell-open",
+    "window-all",
+    "process-exit",
+    "process-relaunch",
+    "notification-all",
+    "global-shortcut-all",
+    "system-tray"
+] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.11", features = ["json", "stream", "blocking"] }
+futures = "0.3"
+zip = "0.6"
+sha2 = "0.10"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

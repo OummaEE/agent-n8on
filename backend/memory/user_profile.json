@@ -1,0 +1,23 @@
+{
+  "name": "Jane",
+  "languages": [
+    "Russian",
+    "English",
+    "Swedish"
+  ],
+  "os": "Windows",
+  "user_folder": "C:/Users/Dator",
+  "tools_installed": [
+    "Ollama",
+    "n8n",
+    "Playwright",
+    "Python",
+    "PowerShell"
+  ],
+  "models": [
+    "qwen2.5-coder:14b"
+  ],
+  "preferences": {},
+  "facts": [],
+  "last_seen": ""
+}

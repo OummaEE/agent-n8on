@@ -1,0 +1,17 @@
+{
+  "parameters": {
+    "rule": {
+      "interval": [
+        {
+          "field": "hours",
+          "hoursInterval": 1
+        }
+      ]
+    }
+  },
+  "id": "{uuid}",
+  "name": "Schedule Trigger",
+  "type": "n8n-nodes-base.scheduleTrigger",
+  "typeVersion": 1.2,
+  "position": [0, 0]
+}

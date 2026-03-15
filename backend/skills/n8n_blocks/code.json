@@ -1,0 +1,10 @@
+{
+  "parameters": {
+    "jsCode": "return $input.all();"
+  },
+  "id": "{uuid}",
+  "name": "Code",
+  "type": "n8n-nodes-base.code",
+  "typeVersion": 2,
+  "position": [0, 0]
+}

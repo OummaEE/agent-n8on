@@ -1,0 +1,11 @@
+{
+  "6d484dd44f8e22fa": {
+    "intent": "CHAT",
+    "confidence": 0.9,
+    "entities": {},
+    "missing_required": [],
+    "clarify_question": null,
+    "original_message": "расскажи мне анекдот",
+    "timestamp": "2026-03-06T14:16:20.075329"
+  }
+}

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent n8On</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="header">
+    <div class="header-left">
+        <div class="logo">n8</div>
+        <div>
+            <h1>Agent n8On</h1>
+            <div class="subtitle">v1.0.0 · Local · Ollama · n8n</div>
+        </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+        <button onclick="clearHistory()" class="header-btn" title="Clear chat">Clear</button>
+        <button onclick="checkStatus()" class="header-btn" title="Check status">Status</button>
+        <div id="status" class="status-badge disconnected">
+            <span class="status-dot"></span>
+            <span id="statusText">Connecting...</span>
+        </div>
+    </div>
+</div>
+
+<div class="chat-container" id="chat">
+    <div class="welcome" id="welcome">
+        <h2>Welcome to Agent n8On</h2>
+        <p>Your local AI assistant. Write in any language.</p>
+        <div class="quick-actions">
+            <div class="quick-action" onclick="sendQuick('Show system info')">
+                <div class="qa-icon">&#x1F4BB;</div>
+                <div class="qa-title">System Info</div>
+                <div class="qa-desc">CPU, RAM, disk</div>
+            </div>
+            <div class="quick-action" onclick="sendQuick('List my n8n workflows')">
+                <div class="qa-icon">&#x26A1;</div>
+                <div class="qa-title">n8n Workflows</div>
+                <div class="qa-desc">Automations</div>
+            </div>
+            <div class="quick-action" onclick="sendQuick('Show available templates')">
+                <div class="qa-icon">&#x1F4CB;</div>
+                <div class="qa-title">Templates</div>
+                <div class="qa-desc">Ready-made workflows</div>
+            </div>
+            <div class="quick-action" onclick="sendQuick('What can you do?')">
+                <div class="qa-icon">&#x2753;</div>
+                <div class="qa-title">Help</div>
+                <div class="qa-desc">Capabilities</div>
+            </div>
+        </div>
+    </div>
+    <div class="message-group" id="messages"></div>
+</div>
+
+<div class="input-area">
+    <div class="input-wrapper">
+        <textarea class="input-box" id="input" placeholder="Write anything... (Enter to send)" rows="1"></textarea>
+        <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+        </button>
+    </div>
+    <div class="footer-info">Ollama · Local · Your data stays on your PC</div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

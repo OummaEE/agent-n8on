@@ -1,0 +1,44 @@
+{
+  "name": "Jane",
+  "languages": [
+    "Russian",
+    "English",
+    "Swedish"
+  ],
+  "os": "Windows",
+  "user_folder": "C:/Users/Dator",
+  "tools_installed": [
+    "Ollama",
+    "n8n",
+    "Playwright",
+    "Python",
+    "PowerShell"
+  ],
+  "models": [
+    "qwen2.5-coder:14b"
+  ],
+  "preferences": {},
+  "facts": [],
+  "last_seen": "2026-03-06T13:11:36.696338",
+  "tool_usage": {
+    "telegram_send": 3,
+    "telegram_send_file": 2,
+    "delete_files": 16,
+    "raw": 37,
+    "stealth_browse": 1,
+    "web_login": 2,
+    "find_duplicates": 9,
+    "list_files": 4,
+    "n8n_create_workflow": 7,
+    "n8n_debug_workflow": 3,
+    "clarify": 2,
+    "n8n_create_from_template": 8,
+    "n8n_template_list": 4,
+    "n8n_template_get": 1,
+    "n8n_list_workflows": 9,
+    "brain_slow_path": 2,
+    "run_python": 2,
+    "n8n_activate_workflow": 1,
+    "brain_error_analysis": 1
+  }
+}

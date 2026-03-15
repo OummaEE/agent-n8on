@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Установка Agent n8On</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      color: #e0e0e0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+    }
+    .installer {
+      width: 520px;
+      background: rgba(255,255,255,0.04);
+      border-radius: 24px;
+      padding: 44px 40px 36px;
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+    }
+    .logo { text-align: center; margin-bottom: 28px; }
+    .logo-icon {
+      width: 80px; height: 80px;
+      background: linear-gradient(135deg, #58a6ff 0%, #bc8cff 100%);
+      border-radius: 20px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 32px; font-weight: 800; color: white;
+      margin-bottom: 16px;
+      box-shadow: 0 8px 32px rgba(88,166,255,0.3);
+      letter-spacing: -1px;
+    }
+    h1 { font-size: 22px; font-weight: 700; margin-bottom: 8px; color: #fff; }
+    .subtitle { color: #8b949e; font-size: 14px; line-height: 1.5; }
+    .step { display: none; }
+    .step.active { display: block; animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+    .system-check { background: rgba(0,0,0,0.25); border-radius: 14px; padding: 6px 20px; margin: 20px 0; }
+    .check-item {
+      display: flex; align-items: center; padding: 11px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 14px;
+    }
+    .check-item:last-child { border-bottom: none; }
+    .check-icon { width: 28px; flex-shrink: 0; font-size: 17px; }
+    .check-label { flex: 1; color: #c9d1d9; }
+    .check-value { color: #8b949e; font-size: 13px; }
+    .recommendation {
+      background: rgba(88,166,255,0.08); border: 1px solid rgba(88,166,255,0.2);
+      border-radius: 12px; padding: 14px 16px; margin: 16px 0;
+      font-size: 13px; line-height: 1.5; display: none;
+    }
+    .model-option {
+      background: rgba(0,0,0,0.2); border: 2px solid rgba(255,255,255,0.06);
+      border-radius: 14px; padding: 14px 16px; margin: 10px 0;
+      cursor: pointer; transition: all 0.2s ease; position: relative;
+    }
+    .model-option:hover { background: rgba(88,166,255,0.07); border-color: rgba(88,166,255,0.3); }
+    .model-option.selected { border-color: #58a6ff; background: rgba(88,166,255,0.1); }
+    .model-option.recommended::before {
+      content: 'РЕКОМЕНДУЕТСЯ';
+      display: block; color: #58a6ff; font-size: 11px; font-weight: 600;
+      letter-spacing: 0.5px; margin-bottom: 6px;
+    }
+    .model-name { font-weight: 600; font-size: 15px; color: #e6edf3; margin-bottom: 4px; }
+    .model-desc { color: #8b949e; font-size: 13px; }
+    .model-size { color: #58a6ff; font-size: 12px; margin-top: 5px; }
+    .model-option.disabled {
+      opacity: 0.45; cursor: not-allowed;
+      border-color: rgba(255,255,255,0.04) !important;
+    }
+    .model-option.disabled:hover { background: rgba(0,0,0,0.2); border-color: rgba(255,255,255,0.04) !important; }
+    .model-disabled-reason {
+      color: #f85149; font-size: 12px; margin-top: 6px;
+      display: flex; align-items: center; gap: 5px;
+    }
+    .progress-container {
+      background: rgba(0,0,0,0.35); border-radius: 10px;
+      height: 8px; margin: 20px 0 10px; overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #58a6ff, #bc8cff);
+      border-radius: 10px; transition: width 0.4s ease; min-width: 2%;
+    }
+    .progress-text { text-align: center; color: #8b949e; font-size: 13px; }
+    .install-items { margin: 16px 0; }
+    .install-item {
+      display: flex; align-items: center; padding: 10px 14px;
+      border-radius: 10px; margin: 4px 0;
+      background: rgba(0,0,0,0.15); font-size: 14px; color: #c9d1d9; gap: 12px;
+    }
+    .status-icon { font-size: 18px; width: 22px; text-align: center; flex-shrink: 0; }
+    .item-name { flex: 1; }
+    .btn {
+      width: 100%; padding: 14px; border: none; border-radius: 12px;
+      font-size: 15px; font-weight: 600; cursor: pointer;
+      transition: all 0.2s; margin-top: 18px; letter-spacing: 0.3px;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #58a6ff, #1f6feb); color: white;
+      box-shadow: 0 4px 16px rgba(88,166,255,0.25);
+    }
+    .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(88,166,255,0.4); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+    .step-indicator { display: flex; justify-content: center; gap: 6px; margin-bottom: 28px; }
+    .step-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.15); transition: all 0.3s; }
+    .step-dot.active { background: #58a6ff; width: 20px; border-radius: 4px; }
+    .step-dot.done { background: #3fb950; }
+    .info-text { text-align: center; color: #8b949e; font-size: 13px; line-height: 1.6; margin: 16px 0; }
+    .completion-option {
+      display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+      background: rgba(0,0,0,0.2); border-radius: 10px; margin: 6px 0; cursor: pointer; font-size: 14px; color: #c9d1d9;
+    }
+    .completion-option input[type="checkbox"] { width: 16px; height: 16px; accent-color: #58a6ff; cursor: pointer; }
+    .installed-list { background: rgba(0,0,0,0.2); border-radius: 12px; padding: 14px 18px; margin: 14px 0; }
+    .installed-list li { list-style: none; padding: 5px 0; font-size: 14px; color: #c9d1d9; }
+    .installed-list li::before { content: '\2022  '; color: #3fb950; }
+  </style>
+</head>
+<body>
+  <div class="installer">
+    <div class="step-indicator" id="stepIndicator">
+      <div class="step-dot active" id="dot1"></div>
+      <div class="step-dot" id="dot2"></div>
+      <div class="step-dot" id="dot3"></div>
+      <div class="step-dot" id="dot4"></div>
+      <div class="step-dot" id="dot5"></div>
+      <div class="step-dot" id="dot6"></div>
+    </div>
+
+    <!-- STEP 1: WELCOME -->
+    <div class="step active" id="step1">
+      <div class="logo">
+        <div class="logo-icon">n8</div>
+        <h1>Добро пожаловать в Agent n8On</h1>
+        <p class="subtitle">Умный помощник на вашем компьютере. Без облака, без подписок.</p>
+      </div>
+      <p class="info-text">Установка займёт 5–15 минут в зависимости от скорости интернета.<br>Ваши данные не покидают компьютер.</p>
+      <button class="btn btn-primary" onclick="startSystemCheck()">Начать установку</button>
+    </div>
+
+    <!-- STEP 2: SYSTEM CHECK -->
+    <div class="step" id="step2">
+      <h1 style="margin-bottom:16px;">Проверка системы</h1>
+      <div class="system-check">
+        <div class="check-item">
+          <div class="check-icon" id="icon-os">&#x23F3;</div>
+          <div class="check-label">Операционная система</div>
+          <div class="check-value" id="val-os">—</div>
+        </div>
+        <div class="check-item">
+          <div class="check-icon" id="icon-ram">&#x23F3;</div>
+          <div class="check-label">Оперативная память</div>
+          <div class="check-value" id="val-ram">—</div>
+        </div>
+        <div class="check-item">
+          <div class="check-icon" id="icon-gpu">&#x23F3;</div>
+          <div class="check-label">Видеокарта</div>
+          <div class="check-value" id="val-gpu">—</div>
+        </div>
+        <div class="check-item">
+          <div class="check-icon" id="icon-disk">&#x23F3;</div>
+          <div class="check-label">Свободное место</div>
+          <div class="check-value" id="val-disk">—</div>
+        </div>
+      </div>
+      <div class="recommendation" id="recommendation">
+        <strong style="color:#58a6ff">Рекомендация:</strong>
+        <span id="rec-text"></span>
+      </div>
+      <button class="btn btn-primary" id="step2btn" disabled onclick="showStep(3)">Продолжить</button>
+    </div>
+
+    <!-- STEP 3: MODEL SELECTION -->
+    <div class="step" id="step3">
+      <h1 style="margin-bottom:8px;">Выберите AI модель</h1>
+      <p class="subtitle" style="margin-bottom:16px;">На основе вашего железа мы рекомендуем оптимальный вариант</p>
+      <div id="modelOptions"></div>
+      <button class="btn btn-primary" onclick="showStep(4)">Продолжить</button>
+    </div>
+
+    <!-- STEP 4: N8N SETUP -->
+    <div class="step" id="step4">
+      <h1 style="margin-bottom:8px;">Настройка автоматизаций</h1>
+      <p class="subtitle" style="margin-bottom:16px;">n8n позволяет создавать автоматизации без кода</p>
+      <div class="model-option selected" id="n8n-local" onclick="selectN8n('local', this)">
+        <div class="model-name">Установить локально</div>
+        <div class="model-desc">Всё на вашем компьютере, бесплатно</div>
+      </div>
+      <div class="model-option" id="n8n-cloud" onclick="selectN8n('cloud', this)">
+        <div class="model-name">Использовать n8n Cloud</div>
+        <div class="model-desc">Требует регистрации на n8n.io</div>
+      </div>
+      <div class="model-option" id="n8n-skip" onclick="selectN8n('skip', this)">
+        <div class="model-name">Пропустить</div>
+        <div class="model-desc">Можно настроить позже</div>
+      </div>
+      <button class="btn btn-primary" onclick="startInstallation()">Установить</button>
+    </div>
+
+    <!-- STEP 5: PROGRESS -->
+    <div class="step" id="step5">
+      <h1 style="margin-bottom:16px;">Установка компонентов</h1>
+      <div class="install-items">
+        <div class="install-item">
+          <span class="status-icon" id="status-agent">&#x23F3;</span>
+          <span class="item-name">Agent n8On</span>
+        </div>
+        <div class="install-item">
+          <span class="status-icon" id="status-ollama">&#x23F3;</span>
+          <span class="item-name">Ollama (движок AI)</span>
+        </div>
+        <div class="install-item">
+          <span class="status-icon" id="status-model">&#x23F3;</span>
+          <span class="item-name" id="model-item-name">AI модель</span>
+        </div>
+        <div class="install-item" id="n8n-install-item" style="display:none;">
+          <span class="status-icon" id="status-n8n">&#x23F3;</span>
+          <span class="item-name">n8n (автоматизации)</span>
+        </div>
+      </div>
+      <div class="progress-container">
+        <div class="progress-bar" id="progressBar" style="width:2%"></div>
+      </div>
+      <p class="progress-text" id="progressText">Подготовка...</p>
+    </div>
+
+    <!-- STEP 6: COMPLETE -->
+    <div class="step" id="step6">
+      <div class="logo">
+        <div class="logo-icon" style="font-size:40px; background:linear-gradient(135deg,#3fb950,#388bfd);">&#x2713;</div>
+        <h1>Установка завершена!</h1>
+        <p class="subtitle">Agent n8On готов к работе</p>
+      </div>
+      <ul class="installed-list" id="installedList"></ul>
+      <div class="completion-option">
+        <input type="checkbox" id="launchNow" checked>
+        <label for="launchNow">Запустить Agent n8On сейчас</label>
+      </div>
+      <p class="info-text">Найдите Agent n8On в меню Пуск для последующих запусков.</p>
+      <button class="btn btn-primary" onclick="finishInstallation()">Готово</button>
+    </div>
+  </div>
+
+  <script>
+    // Safe wrappers — never throw during script initialisation.
+    // Tauri v1 exposes invoke at window.__TAURI__.invoke (v1.1+) and
+    // also at window.__TAURI__.tauri.invoke.  We try both.
+    function invokeCmd(cmd, args) {
+      try {
+        var t = window.__TAURI__;
+        if (t && t.invoke)              return t.invoke(cmd, args);
+        if (t && t.tauri && t.tauri.invoke) return t.tauri.invoke(cmd, args);
+      } catch (e) {
+        console.error('[setup] invokeCmd error:', e);
+        return Promise.reject(String(e));
+      }
+      console.warn('[setup] Tauri invoke not found — is withGlobalTauri:true set?');
+      return Promise.reject('Tauri invoke not available');
+    }
+
+    function listenEvent(event, handler) {
+      try {
+        var t = window.__TAURI__;
+        if (t && t.event && t.event.listen) return t.event.listen(event, handler);
+      } catch (e) {
+        console.error('[setup] listenEvent error:', e);
+        return Promise.resolve(function(){});
+      }
+      console.warn('[setup] Tauri event.listen not found');
+      return Promise.resolve(function(){});
+    }
+
+    var systemInfo = {};
+    var selectedModel = '';
+    var n8nOption = 'local';
+    var currentStep = 1;
+
+    function updateDots(step) {
+      for (var i = 1; i <= 6; i++) {
+        var dot = document.getElementById('dot' + i);
+        if (!dot) continue;
+        dot.className = 'step-dot';
+        if (i < step) dot.className += ' done';
+        else if (i === step) dot.className += ' active';
+      }
+    }
+
+    function showStep(num) {
+      var steps = document.querySelectorAll('.step');
+      for (var i = 0; i < steps.length; i++) steps[i].classList.remove('active');
+      var el = document.getElementById('step' + num);
+      if (el) el.classList.add('active');
+      currentStep = num;
+      updateDots(num);
+    }
+
+    function setCheckItem(iconId, valId, ok, value) {
+      var icon = document.getElementById(iconId);
+      var val = document.getElementById(valId);
+      icon.textContent = ok ? '\u2705' : '\u26A0\uFE0F';
+      if (val) val.textContent = value;
+    }
+
+    function startSystemCheck() {
+      showStep(2);
+      invokeCmd('check_system').then(function(info) {
+        systemInfo = info;
+        renderSystemCheck(info);
+        buildModelOptions(info.models);
+      }).catch(function(e) {
+        console.error('check_system error:', e);
+        var fallback = {
+          ram_gb: 8, vram_gb: null, gpu_name: null, free_disk_gb: 50,
+          recommendation: 'Рекомендуем сбалансированную модель.',
+          models: [
+            { name: 'qwen2.5-coder:14b', display_name: 'Qwen 2.5 Coder 14B', description: 'Лучшее качество, для мощных ПК', size_gb: 8.5, recommended: false, disabled: true, disabled_reason: 'Нет данных о GPU. Не рекомендуется без видеокарты.' },
+            { name: 'qwen2.5-coder:7b', display_name: 'Qwen 2.5 Coder 7B', description: 'Сбалансированный вариант', size_gb: 4.5, recommended: true, disabled: false, disabled_reason: '' },
+            { name: 'qwen2.5-coder:3b', display_name: 'Qwen 2.5 Coder 3B', description: 'Для слабых компьютеров', size_gb: 2.0, recommended: false, disabled: false, disabled_reason: '' }
+          ]
+        };
+        systemInfo = fallback;
+        renderSystemCheck(fallback);
+        buildModelOptions(fallback.models);
+      });
+    }
+
+    function renderSystemCheck(info) {
+      setCheckItem('icon-os', 'val-os', true, 'Windows 10/11');
+      setCheckItem('icon-ram', 'val-ram', info.ram_gb >= 8, info.ram_gb + ' GB');
+      if (info.gpu_name) {
+        var gpuVal = info.gpu_name + (info.vram_gb ? ' (' + info.vram_gb + ' GB)' : '');
+        setCheckItem('icon-gpu', 'val-gpu', true, gpuVal);
+      } else {
+        setCheckItem('icon-gpu', 'val-gpu', false, 'Не обнаружена (CPU)');
+      }
+      setCheckItem('icon-disk', 'val-disk', info.free_disk_gb >= 15, info.free_disk_gb + ' GB');
+
+      var rec = document.getElementById('recommendation');
+      rec.style.display = 'block';
+      document.getElementById('rec-text').textContent = ' ' + info.recommendation;
+      document.getElementById('step2btn').disabled = false;
+    }
+
+    function buildModelOptions(models) {
+      var container = document.getElementById('modelOptions');
+      while (container.firstChild) container.removeChild(container.firstChild);
+
+      models.forEach(function(model) {
+        var isDisabled = model.disabled === true;
+        var classes = 'model-option';
+        if (isDisabled) classes += ' disabled';
+        else if (model.recommended) classes += ' recommended selected';
+
+        var div = document.createElement('div');
+        div.className = classes;
+
+        var nameEl = document.createElement('div');
+        nameEl.className = 'model-name';
+        nameEl.textContent = model.display_name;
+
+        var descEl = document.createElement('div');
+        descEl.className = 'model-desc';
+        descEl.textContent = model.description;
+
+        var sizeEl = document.createElement('div');
+        sizeEl.className = 'model-size';
+        sizeEl.textContent = 'Размер: ~' + model.size_gb + ' GB';
+
+        div.appendChild(nameEl);
+        div.appendChild(descEl);
+        div.appendChild(sizeEl);
+
+        if (isDisabled && model.disabled_reason) {
+          var reasonEl = document.createElement('div');
+          reasonEl.className = 'model-disabled-reason';
+          reasonEl.textContent = '\u26A0 ' + model.disabled_reason;
+          div.appendChild(reasonEl);
+        }
+
+        if (!isDisabled) {
+          var modelName = model.name;
+          div.addEventListener('click', function() { selectModelEl(modelName, div); });
+          if (model.recommended) selectedModel = model.name;
+        }
+
+        container.appendChild(div);
+      });
+
+      // If no recommended model was auto-selected, pick the last non-disabled one
+      if (!selectedModel) {
+        var opts = container.querySelectorAll('.model-option:not(.disabled)');
+        if (opts.length > 0) {
+          var last = opts[opts.length - 1];
+          last.classList.add('selected');
+          selectedModel = models.filter(function(m) { return !m.disabled; }).slice(-1)[0].name;
+        }
+      }
+    }
+
+    function selectModelEl(name, element) {
+      var opts = document.querySelectorAll('#modelOptions .model-option');
+      for (var i = 0; i < opts.length; i++) opts[i].classList.remove('selected');
+      element.classList.add('selected');
+      selectedModel = name;
+    }
+
+    function selectN8n(option, element) {
+      n8nOption = option;
+      var opts = document.querySelectorAll('#step4 .model-option');
+      for (var i = 0; i < opts.length; i++) opts[i].classList.remove('selected');
+      element.classList.add('selected');
+    }
+
+    function startInstallation() {
+      showStep(5);
+
+      if (n8nOption !== 'skip') {
+        document.getElementById('n8n-install-item').style.display = 'flex';
+      }
+
+      document.getElementById('model-item-name').textContent = 'AI модель (' + selectedModel + ')';
+
+      listenEvent('install-progress', function(event) {
+        var payload = event.payload;
+        var statusEl = document.getElementById('status-' + payload.component);
+        if (statusEl) {
+          if (payload.status === 'done') statusEl.textContent = '\u2705';
+          else if (payload.status === 'error') statusEl.textContent = '\u274C';
+          else statusEl.textContent = '\uD83D\uDD04';
+        }
+        document.getElementById('progressBar').style.width = payload.progress + '%';
+        document.getElementById('progressText').textContent = payload.message;
+        if (payload.progress >= 100) {
+          setTimeout(showCompletionScreen, 1200);
+        }
+      });
+
+      invokeCmd('run_installation', { model: selectedModel, n8nOption: n8nOption }).catch(function(e) {
+        document.getElementById('progressText').textContent = 'Ошибка: ' + e;
+      });
+    }
+
+    function showCompletionScreen() {
+      var list = document.getElementById('installedList');
+      while (list.firstChild) list.removeChild(list.firstChild);
+
+      function addItem(text) {
+        var li = document.createElement('li');
+        li.textContent = text;
+        list.appendChild(li);
+      }
+
+      addItem('Agent n8On v1.0.0');
+      addItem('Ollama + ' + (selectedModel || 'AI модель'));
+      if (n8nOption === 'local') addItem('n8n (автоматизации)');
+
+      showStep(6);
+    }
+
+    function finishInstallation() {
+      var launchNow = document.getElementById('launchNow').checked;
+      invokeCmd('complete_setup', { launchApp: launchNow }).catch(function(e) {
+        console.error(e);
+        invokeCmd('close_installer').catch(function(){});
+      });
+    }
+  </script>
+</body>
+</html>
