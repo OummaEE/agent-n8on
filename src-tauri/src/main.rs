@@ -198,11 +198,16 @@ fn resolve_resource_dir(app_handle: &tauri::AppHandle) -> String {
         let probe = candidate.join("backend").join("n8on.py");
         log(&format!("resolve_resource_dir: probing {}", probe.display()));
         if probe.exists() {
-            // Canonicalize to collapse any ".." segments
+            // Canonicalize to collapse any ".." segments, then strip \\?\ prefix on Windows
             let resolved = candidate
                 .canonicalize()
                 .unwrap_or_else(|_| candidate.clone())
                 .to_string_lossy()
+                .to_string();
+            #[cfg(target_os = "windows")]
+            let resolved = resolved
+                .strip_prefix(r"\\?\")
+                .unwrap_or(&resolved)
                 .to_string();
             log(&format!("resolve_resource_dir: FOUND → {}", resolved));
             return resolved;
@@ -221,32 +226,34 @@ fn resolve_resource_dir(app_handle: &tauri::AppHandle) -> String {
 }
 
 fn start_backend(resource_dir: &str) -> Option<Child> {
-    let backend_dir = format!("{}/backend", resource_dir);
-    let backend_script = format!("{}/n8on.py", backend_dir);
-    let python_embed = format!("{}/python-embed/python.exe", backend_dir);
+    let base = std::path::Path::new(resource_dir);
+    let backend_dir = base.join("backend");
+    let backend_script = backend_dir.join("n8on.py");
+    let python_embed = backend_dir.join("python-embed").join("python.exe");
 
     log(&format!("start_backend: resource_dir={}", resource_dir));
-    log(&format!("start_backend: backend_script={} exists={}", backend_script,
-        std::path::Path::new(&backend_script).exists()));
+    log(&format!("start_backend: backend_script={} exists={}", backend_script.display(),
+        backend_script.exists()));
 
-    if !std::path::Path::new(&backend_script).exists() {
-        log(&format!("start_backend: ERROR — script not found at {}", backend_script));
+    if !backend_script.exists() {
+        log(&format!("start_backend: ERROR — script not found at {}", backend_script.display()));
         return None;
     }
 
     // Prefer embedded Python runtime; fall back to system Python
-    let python_exe = if std::path::Path::new(&python_embed).exists() {
-        log(&format!("start_backend: using embedded Python → {}", python_embed));
+    let python_exe: std::path::PathBuf = if python_embed.exists() {
+        log(&format!("start_backend: using embedded Python → {}", python_embed.display()));
         python_embed.clone()
     } else {
-        log(&format!("start_backend: embedded Python NOT found at {}, falling back to system 'python'", python_embed));
-        "python".to_string()
+        log(&format!("start_backend: embedded Python NOT found at {}, falling back to system 'python'", python_embed.display()));
+        std::path::PathBuf::from("python")
     };
 
-    log(&format!("start_backend: spawning: {} {} --no-browser", python_exe, backend_script));
+    log(&format!("start_backend: spawning: {} {} --no-browser", python_exe.display(), backend_script.display()));
 
     match Command::new(&python_exe)
-        .args([&backend_script, "--no-browser"])
+        .arg(&backend_script)
+        .arg("--no-browser")
         .current_dir(&backend_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -274,7 +281,7 @@ fn start_backend(resource_dir: &str) -> Option<Child> {
             Some(child)
         }
         Err(e) => {
-            log(&format!("start_backend: FAILED to spawn (python={}) — {}", python_exe, e));
+            log(&format!("start_backend: FAILED to spawn (python={}) — {}", python_exe.display(), e));
             None
         }
     }
