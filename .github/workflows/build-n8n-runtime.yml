@@ -36,7 +36,11 @@ jobs:
         with:
           arch: x64
 
-      
+      - name: Fix Python distutils for node-gyp
+        shell: pwsh
+        run: |
+          pip install setuptools
+
       # ============================================================
       # ДИАГНОСТИКА — без этого шага не гадаем, а знаем
       # ============================================================
@@ -49,11 +53,11 @@ jobs:
           
           Write-Host "`n=== npm config ==="
           npm config list
-          npm config get msvs_version
           
           Write-Host "`n=== Python ==="
           where.exe python 2>$null || Write-Host "python not found in PATH"
           python --version 2>$null || Write-Host "python --version failed"
+          pip show setuptools 2>$null | Select-Object -First 3
           
           Write-Host "`n=== C++ compiler (cl.exe) ==="
           where.exe cl 2>$null || Write-Host "cl.exe not found in PATH"
@@ -213,7 +217,6 @@ jobs:
           path: |
             npm-install.log
             npm-install-retry.log
-            C:\Users\runneradmin\AppData\Local\npm-cache\_logs\*
           if-no-files-found: warn
           retention-days: 7
 
