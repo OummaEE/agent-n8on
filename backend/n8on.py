@@ -36,6 +36,13 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 import io
 
+# -- New architecture layers (provider, network, config, logging) -----------
+from providers.network_status import NetworkStatus as _NetworkStatus
+from agent_config import AgentConfig as _AgentConfig
+
+_agent_cfg = _AgentConfig.load()
+_net_status = _NetworkStatus(ollama_url=_agent_cfg.ollama_url)
+
 # ============================================================
 # FIX: Force UTF-8 on Windows console (prevents 'charmap' codec errors)
 # ============================================================
@@ -3593,7 +3600,8 @@ class AgentHandler(BaseHTTPRequestHandler):
             self._send_html(HTML_PAGE)
 
         elif parsed.path == '/api/status':
-            # Check Ollama connection
+            # Check Ollama connection + new architecture status
+            _net_status.refresh()
             try:
                 resp = requests.get(f"{OLLAMA_URL}/api/tags", timeout=3)
                 models = [m["name"] for m in resp.json().get("models", [])]
@@ -3606,10 +3614,23 @@ class AgentHandler(BaseHTTPRequestHandler):
                     "tools": len(TOOLS),
                     "skills": len(LOADED_SKILLS),
                     "skill_names": list(LOADED_SKILLS.keys()),
-                    "version": VERSION
+                    "version": VERSION,
+                    # New architecture fields
+                    "provider_mode": _agent_cfg.provider_mode,
+                    "knowledge_mode": _agent_cfg.knowledge_mode,
+                    "internet": _net_status.internet,
+                    "effective_mode": _net_status.effective_mode,
                 })
             except:
-                self._send_json({"ollama": False, "model": None, "tools": len(TOOLS), "skills": len(LOADED_SKILLS), "version": VERSION})
+                self._send_json({
+                    "ollama": False, "model": None,
+                    "tools": len(TOOLS), "skills": len(LOADED_SKILLS),
+                    "version": VERSION,
+                    "provider_mode": _agent_cfg.provider_mode,
+                    "knowledge_mode": _agent_cfg.knowledge_mode,
+                    "internet": _net_status.internet,
+                    "effective_mode": _net_status.effective_mode,
+                })
 
         elif parsed.path == '/api/tools':
             tools_list = sorted(TOOLS.keys())
