@@ -60,7 +60,7 @@ agent-n8On is **not** positioned as:
 
 It is specifically focused on this loop:
 
-**plain-language request -> n8n workflow -> validation -> execution -> repair -> user confirmation**
+**plain-language request -> Brain routing -> n8n workflow path -> validation -> execution -> repair -> user confirmation**
 
 That loop is the product.
 
@@ -84,16 +84,25 @@ The agent must collect what the user sees or receives and continue debugging.
 ### 1. User describes the automation
 The user explains in plain language what they want to happen.
 
-### 2. Agent interprets the request
-The system identifies:
+### 2. Brain decides how to process the request
+Before the system commits to workflow work, the Brain routes the request.
 
-- the desired action,
-- the trigger,
-- the input source,
-- the expected output,
-- missing details if any.
+```text
+User
+  -> Brain (Router)
+       ├── CLARIFY -> ask clarifying question
+       ├── FAST    -> Controller -> direct action / direct n8n path
+       └── SLOW    -> Planner
+                     -> plan steps
+                     -> optional plan confirmation
+                     -> Executor
+                     -> Verifier
+                     -> learned rules saved
+```
 
-### 3. Agent creates or updates an n8n workflow
+This matters because not every request should go straight into workflow generation or heavy LLM handling.
+
+### 3. If needed, the agent creates or updates an n8n workflow
 The system produces workflow JSON aligned with the requested task.
 
 ### 4. Agent validates the workflow
@@ -110,6 +119,22 @@ When automated checks pass, the agent asks the user whether everything works in 
 
 ### 8. Agent continues debugging if the user reports a problem
 If the user says the result is still wrong, the agent gathers concrete symptoms and re-enters the repair loop.
+
+---
+
+## Brain-first processing model
+The front-door control flow is part of the product, not an implementation detail.
+
+### CLARIFY
+Used when the request is missing critical information or is too ambiguous to execute safely.
+
+### FAST
+Used when the request is clear, narrow, and can be handled directly without heavyweight planning.
+
+### SLOW
+Used when the request is complex and requires explicit planning, execution, verification, and often repair.
+
+The dedicated routing and planning logic is documented in [`BRAIN_ARCHITECTURE.md`](./BRAIN_ARCHITECTURE.md).
 
 ---
 
@@ -144,13 +169,15 @@ This repository contains the evolving implementation of agent-n8On as an n8n-fir
 
 The long-term architecture centers on:
 
+- Brain-based request routing,
 - local runtime orchestration,
 - n8n workflow creation and update,
 - execution inspection,
 - repair loops,
 - installer reliability,
 - user confirmation flow,
-- logs and diagnostics.
+- logs and diagnostics,
+- learned operational rules.
 
 Some historical parts of the repo reflect a broader local AI assistant direction. The current product direction is narrower and stricter: **n8n-first, repair-focused, user-confirmed automation**.
 
@@ -161,7 +188,8 @@ Start here if you want the real product definition, not just scattered code beha
 
 - [`PROJECT_IDEA.md`](./PROJECT_IDEA.md) — what the product is and why it exists
 - [`SPECIFICATION.md`](./SPECIFICATION.md) — behavior rules and success criteria
-- [`ARCHITECTURE.md`](./ARCHITECTURE.md) — layers, responsibilities, and flow
+- [`ARCHITECTURE.md`](./ARCHITECTURE.md) — system layers, responsibilities, and flow
+- [`BRAIN_ARCHITECTURE.md`](./BRAIN_ARCHITECTURE.md) — routing, planning, execution, verification, learned rules
 - [`INSTALLER_SPEC.md`](./INSTALLER_SPEC.md) — installer behavior and failure handling
 - [`CLAUDE.md`](./CLAUDE.md) — AI-assisted development rules for this repo
 
@@ -173,19 +201,22 @@ If these documents conflict with older code comments or older README assumptions
 1. **n8n-first, not feature-chaos**
 2. **installer reliability is part of the product**
 3. **a workflow that runs but does the wrong thing is not a success**
-4. **user confirmation is mandatory before completion**
-5. **honesty about failure is better than fake success**
+4. **Brain routing is part of correctness, not just convenience**
+5. **user confirmation is mandatory before completion**
+6. **honesty about failure is better than fake success**
 
 ---
 
 ## Scope boundaries
 ### In scope
 - local setup and runtime preparation,
+- Brain-based request routing,
 - n8n workflow generation,
 - validation,
 - execution inspection,
 - iterative repair,
 - user confirmation,
+- learned rules,
 - logs and diagnostics.
 
 ### Out of scope for the core product
@@ -206,6 +237,7 @@ A good version of this product should feel like this:
 - grounded in what the user actually experiences.
 
 If the app generates workflows but still leaves the user to manually untangle them, it has failed its main job.
+If the app routes requests badly before execution starts, it will generate avoidable failures downstream.
 
 ---
 
@@ -214,6 +246,7 @@ This project is actively evolving.
 The product direction is now explicitly centered on:
 
 - **one-click setup**
+- **Brain-based request routing**
 - **self-healing n8n workflows**
 - **user-confirmed completion**
 
