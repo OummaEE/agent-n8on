@@ -121,26 +121,46 @@ Note: `n8on.py` still has its own `MODEL` global read from installer config. `Ag
 
 ---
 
-## 5. Logging
+## 5. Structured Decision Logging
 
-### Active in production path
+**Status: fully active in production path**
+
+**Log location:**
+- Windows: `%APPDATA%/Agent n8On/decisions.jsonl`
+- Other / fallback: `backend/memory/decisions.jsonl`
+
+**Format:** JSON lines (one JSON object per line, with `"event"` and `"ts"` fields).
+
+### Event types and wiring status
+
+| # | Event | Status | Wired at | Fields logged |
+|---|-------|--------|----------|---------------|
+| 1 | `routing` | **fully active** | `brain_layer.py` `handle()` | route (FAST/SLOW/CLARIFY), message preview, reason (multi-step connector, action verb count, too vague, default) |
+| 2 | `provider` | **fully active** | `n8on.py` `ask_ollama()` | provider (ollama/api), mode (local/api/auto/legacy), fallback used, internet state, ollama state, reason |
+| 3 | `knowledge` | **fully active** | `brain_layer.py` `_slow_path()` | sources checked, sources used, augmentation mode (local_only), fragments count, reason (which packs matched, why) |
+| 4 | `execution` | **fully active** | `executor.py` `_run_n8n_workflow_step()`, `_run_n8n_debug_step()` | workflow_id, workflow_name, execution_id, step_intent, success, error, failing_node |
+| 5 | `repair` | **fully active** | `brain_layer.py` `_handle_step_failure()` | attempt number, workflow_id, execution_id, error, failing_node, fix_description, what_changed, success |
+| 6 | `confirmation` | **fully active** | `brain_layer.py` `_request_plan_confirmation()`, `_handle_plan_confirmation()`, `_handle_solution_choice()` | state (asked/confirmed/cancelled/modified/rejected), user_response, problem_description, workflow_id, execution_id |
+
+### Security
+
+- **Never logs**: secrets, tokens, passwords, credential values, API keys
+- Message previews truncated to 120 chars
+- Error messages truncated to 300 chars
+- Credential extraction in `_handle_solution_choice()` is NOT logged
+
+### Legacy logging (still present)
 
 - `print()` statements in brain components
 - Chat history saved to `memory/chat_history.json`
 - Intent cache in `memory/intent_cache.json`
 - Session state in `memory/session_state.json`
-- **`DecisionLogger`** wired into:
-  - `ask_ollama()` — logs provider choice + fallback status + network state
-  - `BrainLayer.handle()` — logs routing decision (FAST/SLOW/CLARIFY)
-  - `BrainLayer._slow_path()` — logs knowledge sources used
-  - `BrainLayer._handle_step_failure()` — logs repair/failure events
-- Writes to `%APPDATA%/Agent n8On/decisions.jsonl` (or `backend/memory/decisions.jsonl`)
 
 ### Not yet implemented
 
 - Log rotation / size limits
 - Log viewer in UI
-- Confirmation event logging (wired but no user confirmation flow triggers it yet)
+- Log export / analysis tools
 
 ---
 
@@ -205,16 +225,19 @@ Note: `n8on.py` still has its own `MODEL` global read from installer config. `Ag
 
 ## 9. Integration Points Summary
 
-| Call Site | File | Before | After |
-|-----------|------|--------|-------|
-| `ask_ollama()` | `n8on.py` | Direct `requests.post()` | `ProviderManager.chat()` with legacy fallback |
-| `IntentClassifier._classify_with_llm()` | `intent_classifier.py` | Direct `requests.post()` | `provider.chat()` if provider set, else legacy |
-| `SmartErrorInterpreter.interpret()` | `intent_classifier.py` | Direct `requests.post()` | `provider.chat()` if provider set, else legacy |
-| `BrainLayer.__init__()` | `brain_layer.py` | No provider param | Accepts `provider`, passes to classifier/interpreter |
-| `BrainLayer._slow_path()` | `brain_layer.py` | Skills only | Skills + KnowledgeSelector retrieval |
-| `BrainLayer.handle()` | `brain_layer.py` | No logging | DecisionLogger logs routing |
-| `BrainLayer._handle_step_failure()` | `brain_layer.py` | No logging | DecisionLogger logs repair events |
-| BrainLayer init in `n8on.py` | `n8on.py` | No provider | Passes `_provider_mgr._local` |
+| Call Site | File | Logging Event |
+|-----------|------|---------------|
+| `ask_ollama()` | `n8on.py` | `provider` — mode, provider, fallback, internet, ollama, reason |
+| `BrainLayer.handle()` | `brain_layer.py` | `routing` — route, reason (from Router.route_with_reason) |
+| `BrainLayer._slow_path()` | `brain_layer.py` | `knowledge` — sources checked/used, augmentation, fragments, reason |
+| `Executor._run_n8n_workflow_step()` | `executor.py` | `execution` — workflow_id, name, execution_id, success, error, failing_node |
+| `Executor._run_n8n_debug_step()` | `executor.py` | `execution` — workflow_id, name, execution_id, success, error |
+| `BrainLayer._handle_step_failure()` | `brain_layer.py` | `repair` — attempt, workflow_id, execution_id, error, failing_node, fix, what_changed |
+| `BrainLayer._request_plan_confirmation()` | `brain_layer.py` | `confirmation` — state=asked |
+| `BrainLayer._handle_plan_confirmation()` | `brain_layer.py` | `confirmation` — state=confirmed/cancelled/modified |
+| `BrainLayer._handle_solution_choice()` | `brain_layer.py` | `confirmation` — state=confirmed/cancelled |
+| `IntentClassifier._classify_with_llm()` | `intent_classifier.py` | (routed through ProviderManager, logged at ask_ollama level) |
+| `SmartErrorInterpreter.interpret()` | `intent_classifier.py` | (routed through ProviderManager, logged at ask_ollama level) |
 
 ---
 
