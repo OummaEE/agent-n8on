@@ -14,6 +14,13 @@ from typing import Any, Dict, List, Optional
 
 from brain.planner import PlanStep
 
+# Decision logger (optional — graceful if not available)
+try:
+    from decision_logger import dlog as _dlog
+    _HAS_DLOG = True
+except ImportError:
+    _HAS_DLOG = False
+
 
 @dataclass
 class StepResult:
@@ -132,11 +139,17 @@ class Executor:
         name = step.params.get("workflow_name", "")
         wf_id = self._find_created_workflow_id(prev_results)
         if not wf_id:
-            return StepResult(
+            result = StepResult(
                 step_index=idx, intent=step.intent,
                 success=False, response="",
                 error=f'No workflow id found to run "{name}"',
             )
+            if _HAS_DLOG:
+                _dlog.log_execution(
+                    workflow_name=name, step_intent=step.intent,
+                    success=False, error=result.error,
+                )
+            return result
         raw = self.controller._call_tool_json(
             "n8n_run_workflow",
             {"workflow_id": wf_id, "wait": True, "raw": True},
@@ -148,6 +161,26 @@ class Executor:
         err = raw.get("error", "")
         success = not err
         response = f'Workflow "{name}" started, execution_id={eid}' if success else err
+
+        # Log the execution event
+        _failing_node = ""
+        if not success:
+            _failing_node = str(
+                raw.get("failing_node", "")
+                or raw.get("node", "")
+                or raw.get("nodeName", "")
+            )
+        if _HAS_DLOG:
+            _dlog.log_execution(
+                workflow_id=wf_id,
+                workflow_name=name,
+                execution_id=eid,
+                step_intent=step.intent,
+                success=success,
+                error=err,
+                failing_node=_failing_node,
+            )
+
         return StepResult(
             step_index=idx, intent=step.intent,
             success=success, response=response,
@@ -170,7 +203,20 @@ class Executor:
             if ctx_eid:
                 p["execution_id"] = ctx_eid
         ctrl_result = self.controller._handle_n8n_debug_workflow(p)
-        return self._wrap(idx, step, ctrl_result)
+        result = self._wrap(idx, step, ctrl_result)
+
+        # Log the debug execution event
+        if _HAS_DLOG:
+            _dlog.log_execution(
+                workflow_id=str(p.get("workflow_id", "")),
+                workflow_name=str(p.get("workflow_name", "")),
+                execution_id=str(p.get("execution_id", "")),
+                step_intent=step.intent,
+                success=result.success,
+                error=result.error,
+            )
+
+        return result
 
     def _wrap(self, idx: int, step: PlanStep,
               ctrl_result: Dict[str, Any]) -> StepResult:

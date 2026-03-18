@@ -2498,19 +2498,35 @@ def ask_ollama(user_message: str, history: list) -> str:
 
     try:
         if _provider_mgr is not None:
-            # --- NEW: route through ProviderManager ---
+            # --- Route through ProviderManager ---
+            _net_status.refresh()
             llm_resp = _provider_mgr.chat(
                 messages, temperature=0.3, max_tokens=4096, timeout=180
             )
             answer = llm_resp.content
+            _mode = _agent_cfg.provider_mode
+            _fallback = _provider_mgr.used_fallback
+            _reason = (
+                f"{_mode} mode, used {llm_resp.provider}"
+                + (", fallback from local" if _fallback else "")
+                + (", internet available" if _net_status.internet else ", offline")
+            )
             _dlog.log_provider(
                 llm_resp.provider,
-                fallback=_provider_mgr.used_fallback,
+                mode=_mode,
+                fallback=_fallback,
                 ollama=_net_status.ollama,
                 internet=_net_status.internet,
+                reason=_reason,
             )
         else:
             # --- LEGACY: direct Ollama call (backward compat) ---
+            _dlog.log_provider(
+                "ollama",
+                mode="legacy",
+                fallback=False,
+                reason="legacy direct call (ProviderManager not initialised)",
+            )
             resp = requests.post(f"{OLLAMA_URL}/api/chat", json={
                 "model": MODEL,
                 "messages": messages,
