@@ -26,10 +26,22 @@ async function checkStatus() {
         const data = await r.json();
         if (data.ollama) {
             statusEl.className = 'status-badge connected';
-            statusText.textContent = data.model || 'Connected';
+            // Show model + provider mode + connectivity
+            let label = data.model || 'Connected';
+            if (data.provider_mode && data.provider_mode !== 'local') {
+                label += ' | ' + data.provider_mode;
+            }
+            if (data.internet === false) {
+                label += ' | offline';
+            }
+            statusText.textContent = label;
         } else {
             statusEl.className = 'status-badge disconnected';
-            statusText.textContent = 'Ollama offline';
+            let label = 'Ollama offline';
+            if (data.effective_mode) {
+                label += ' | ' + data.effective_mode;
+            }
+            statusText.textContent = label;
         }
     } catch {
         statusEl.className = 'status-badge disconnected';

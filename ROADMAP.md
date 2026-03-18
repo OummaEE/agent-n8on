@@ -12,6 +12,36 @@
 
 ---
 
+## Фаза -1: Архитектурный фундамент (scaffolded)
+
+**Статус:** scaffolded (код написан, не подключён к production path)
+
+**Дата:** 2026-03-18
+
+**Что сделано:**
+- [x] Provider layer skeleton: `backend/providers/` (base, local_ollama, api_provider, provider_manager)
+- [x] Network status detection: `backend/providers/network_status.py`
+- [x] Knowledge layer scaffold: `backend/knowledge/` (knowledge_selector, instruction_packs, repair_memory, templates)
+- [x] 3 initial instruction packs: http_request, google_sheets, webhook
+- [x] Unified config: `backend/agent_config.py` (load precedence: defaults < installer < env)
+- [x] Decision logger: `backend/decision_logger.py` (JSON-lines for routing/provider/knowledge/repair)
+- [x] UI status extended: `/api/status` now returns provider_mode, internet, effective_mode
+- [x] `IMPLEMENTATION_STATUS.md` — honest tracking of implemented vs scaffolded vs planned
+
+**Что НЕ сделано (намеренно):**
+- [ ] Wiring ProviderManager into production `ask_ollama()` path
+- [ ] Wiring KnowledgeSelector into brain_layer.py
+- [ ] Wiring DecisionLogger into brain_layer.py
+- [ ] Actual API provider implementation (Claude/OpenAI calls)
+- [ ] RAG / vector DB
+- [ ] Plugin architecture
+
+**Следующий шаг:** подключить scaffolded компоненты к production path после завершения Фазы 0 (Windows install test).
+
+Подробнее о статусе каждого компонента: см. `IMPLEMENTATION_STATUS.md`
+
+---
+
 ## Фаза 0: Завершение Windows-установки
 
 **Статус:** в процессе тестирования
