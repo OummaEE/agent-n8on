@@ -37,6 +37,20 @@ from brain.verifier import VerificationResult, Verifier
 from brain.error_interpreter import ErrorInterpreter, InterpretedError
 from brain.intent_classifier import IntentClassifier, SmartErrorInterpreter, ClassifiedIntent
 
+# Knowledge layer (local-first context retrieval)
+try:
+    from knowledge import KnowledgeSelector
+    _HAS_KNOWLEDGE = True
+except ImportError:
+    _HAS_KNOWLEDGE = False
+
+# Decision logger
+try:
+    from decision_logger import dlog as _dlog
+    _HAS_DLOG = True
+except ImportError:
+    _HAS_DLOG = False
+
 # ---------------------------------------------------------------------------
 # Risk assessment
 # ---------------------------------------------------------------------------
@@ -104,6 +118,7 @@ class BrainLayer:
         rules_file: Optional[Path] = None,
         skills_dir: Optional[Path] = None,
         memory_dir: Optional[Path] = None,
+        provider: Optional[Any] = None,
     ) -> None:
         self.controller = controller
         self.router = Router()
@@ -115,8 +130,9 @@ class BrainLayer:
         # Semantic LLM-based intent classifier (задание 1+2)
         # cache_dir persists cache between sessions; falls back to in-memory if None.
         _cache_dir = memory_dir if memory_dir is not None else Path(__file__).parent.parent / "memory"
-        self.intent_classifier = IntentClassifier(cache_dir=_cache_dir)
-        self.semantic_error_interpreter = SmartErrorInterpreter()
+        # provider: if set, LLM calls in classifier/interpreter go through ProviderManager
+        self.intent_classifier = IntentClassifier(cache_dir=_cache_dir, provider=provider)
+        self.semantic_error_interpreter = SmartErrorInterpreter(provider=provider)
 
         # -- Improvement 2: plan confirmation state --
         self._require_confirmation = require_confirmation
@@ -136,6 +152,14 @@ class BrainLayer:
             if skills_dir is not None
             else Path(__file__).parent.parent / "skills" / "instructions"
         )
+
+        # -- Knowledge layer (local-first context retrieval) --
+        self._knowledge: Optional[Any] = None
+        if _HAS_KNOWLEDGE:
+            try:
+                self._knowledge = KnowledgeSelector(extra_skills_dir=self._skills_dir)
+            except Exception:
+                pass
 
         self._load_learned_rules()
 
@@ -161,6 +185,10 @@ class BrainLayer:
 
         # --- Step 1: pre-route ---
         pre_path = self.router.route(user_message, controller_handled=False)
+
+        # Log the routing decision
+        if _HAS_DLOG:
+            _dlog.log_routing(pre_path, user_message=user_message)
 
         if pre_path == "CLARIFY":
             return self._clarify_result(user_message)
@@ -1094,6 +1122,21 @@ class BrainLayer:
         skill_context = self._find_relevant_skill(user_message)
         lessons       = self._get_learned_lessons()
 
+        # --- Knowledge layer: retrieve relevant context ---
+        knowledge_ctx = None
+        if self._knowledge is not None:
+            try:
+                knowledge_ctx = self._knowledge.retrieve_context(user_message)
+                if _HAS_DLOG and knowledge_ctx.get("sources_used"):
+                    _dlog.log_knowledge(
+                        knowledge_ctx["sources_used"],
+                        task=user_message,
+                        fragments_count=len(knowledge_ctx.get("instruction_fragments", []))
+                            + len(knowledge_ctx.get("repair_hints", [])),
+                    )
+            except Exception:
+                knowledge_ctx = None
+
         # Execute
         step_results: List[StepResult] = self.executor.execute_plan(plan_steps)
 
@@ -1193,6 +1236,16 @@ class BrainLayer:
         # Interpret the error
         error_msg = step_result.error or str(step_result.response) or "Unknown error"
         interpreted = self.error_interpreter.interpret(error_msg, context)
+
+        # Log the repair/failure event
+        if _HAS_DLOG:
+            _dlog.log_repair(
+                attempt=1,
+                error=error_msg[:200],
+                node_id=str(params.get("workflow_id", "")),
+                fix=interpreted.likely_cause if hasattr(interpreted, "likely_cause") else "",
+                success=False,
+            )
     
         # Store pending state for solution choice
         auto_solutions = [s for s in interpreted.solutions if s.auto_executable]

@@ -38,10 +38,25 @@ import io
 
 # -- New architecture layers (provider, network, config, logging) -----------
 from providers.network_status import NetworkStatus as _NetworkStatus
+from providers.provider_manager import ProviderManager as _ProviderManager, ProviderMode as _ProviderMode
 from agent_config import AgentConfig as _AgentConfig
+from decision_logger import dlog as _dlog
 
 _agent_cfg = _AgentConfig.load()
 _net_status = _NetworkStatus(ollama_url=_agent_cfg.ollama_url)
+
+# Build the production ProviderManager — wraps the existing Ollama path
+try:
+    _provider_mgr = _ProviderManager(
+        mode=_ProviderMode(_agent_cfg.provider_mode),
+        ollama_url=_agent_cfg.ollama_url,
+        ollama_model=_agent_cfg.ollama_model,
+        api_key=_agent_cfg.api_key,
+        api_provider=_agent_cfg.api_provider,
+        api_model=_agent_cfg.api_model,
+    )
+except Exception:
+    _provider_mgr = None
 
 # ============================================================
 # FIX: Force UTF-8 on Windows console (prevents 'charmap' codec errors)
@@ -2470,38 +2485,64 @@ def init_tools():
 # ============================================================
 
 def ask_ollama(user_message: str, history: list) -> str:
-    """Send message to Ollama and get response"""
+    """Send message to Ollama and get response.
+
+    Routes through ProviderManager when available (supports local/api/auto).
+    Falls back to direct Ollama HTTP call if ProviderManager is not initialised.
+    """
     history.append({"role": "user", "content": user_message})
-    
+
     # Build dynamic system prompt with memory context and code intelligence
     system_prompt = build_system_prompt(user_message)
     messages = [{"role": "system", "content": system_prompt}] + history[-20:]
-    
+
     try:
-        resp = requests.post(f"{OLLAMA_URL}/api/chat", json={
-            "model": MODEL,
-            "messages": messages,
-            "stream": False,
-            "options": {"temperature": 0.3, "num_predict": 4096}
-        }, timeout=180)
-        resp.encoding = 'utf-8'  # FIX: Force UTF-8 for Ollama responses
-        data = resp.json()
-        answer = data.get("message", {}).get("content", "")
+        if _provider_mgr is not None:
+            # --- NEW: route through ProviderManager ---
+            llm_resp = _provider_mgr.chat(
+                messages, temperature=0.3, max_tokens=4096, timeout=180
+            )
+            answer = llm_resp.content
+            _dlog.log_provider(
+                llm_resp.provider,
+                fallback=_provider_mgr.used_fallback,
+                ollama=_net_status.ollama,
+                internet=_net_status.internet,
+            )
+        else:
+            # --- LEGACY: direct Ollama call (backward compat) ---
+            resp = requests.post(f"{OLLAMA_URL}/api/chat", json={
+                "model": MODEL,
+                "messages": messages,
+                "stream": False,
+                "options": {"temperature": 0.3, "num_predict": 4096}
+            }, timeout=180)
+            resp.encoding = 'utf-8'
+            data = resp.json()
+            answer = data.get("message", {}).get("content", "")
+            if not answer:
+                answer = data.get("response", "") or str(data)
+
         if not answer:
-            # Fallback: sometimes Ollama returns different structure
-            answer = data.get("response", "") or str(data)
+            answer = '{"tool": "chat", "args": {"message": "Empty response from LLM."}}'
         history.append({"role": "assistant", "content": answer})
-        
+
         # Auto-save chat history after each exchange
         save_chat_history(history)
-        
+
         return answer
     except requests.exceptions.ConnectionError:
         return '{"tool": "chat", "args": {"message": "Error: Cannot connect to Ollama. Is it running? Start Ollama first."}}'
     except requests.exceptions.Timeout:
         return '{"tool": "chat", "args": {"message": "Error: Ollama took too long to respond (180s timeout). Try a simpler request."}}'
+    except ConnectionError as e:
+        # ProviderManager raises ConnectionError when no provider is available
+        return f'{{"tool": "chat", "args": {{"message": "No LLM available: {e}"}}}}'
+    except NotImplementedError as e:
+        # APIProvider raises NotImplementedError when api mode used but not yet implemented
+        return f'{{"tool": "chat", "args": {{"message": "API provider not yet available: {e}"}}}}'
     except Exception as e:
-        return f'{{"tool": "chat", "args": {{"message": "Error communicating with Ollama: {e}"}}}}'
+        return f'{{"tool": "chat", "args": {{"message": "Error communicating with LLM: {e}"}}}}'
 
 
 def extract_json(text: str) -> dict:
@@ -3735,7 +3776,12 @@ def main():
     if CONTROLLER is not None:
         try:
             from brain.brain_layer import BrainLayer
-            BRAIN = BrainLayer(CONTROLLER, require_confirmation=False, memory_dir=Path(MEMORY_DIR))
+            BRAIN = BrainLayer(
+                CONTROLLER,
+                require_confirmation=False,
+                memory_dir=Path(MEMORY_DIR),
+                provider=_provider_mgr._local if _provider_mgr is not None else None,
+            )
             print("  BrainLayer: enabled")
         except Exception as e:
             BRAIN = None

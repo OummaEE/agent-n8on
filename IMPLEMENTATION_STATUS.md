@@ -2,45 +2,58 @@
 
 Last updated: 2026-03-18
 
-This document tracks what is **actually implemented and working** vs what is **scaffolded** vs what is **planned only**.
+This document tracks what is **actually implemented and working** vs what is **partially wired** vs what is **scaffolded** vs what is **planned only**.
 
-If it is not listed as "implemented" here, do not describe it as working in any doc or UI.
+If it is not listed as "implemented" or "wired" here, do not describe it as working in any doc or UI.
+
+Status levels:
+- **active in production path** — code runs in the real request flow
+- **partially wired** — code is connected but not all features are live
+- **scaffolded** — code exists, not connected to production
+- **planned** — design only, no code
 
 ---
 
 ## 1. Provider Layer
 
-### Implemented (production path)
+### Active in production path
 
-- **Ollama local provider**: all LLM calls go through `OLLAMA_URL/api/chat`
-- **Model selection**: default `qwen2.5-coder:14b`
-- **Model override precedence**:
-  1. Hardcoded default: `qwen2.5-coder:14b` (`backend/n8on.py:69`)
-  2. Installer config: `%APPDATA%/Agent n8On/config.json` field `model` (`backend/n8on.py:73-81`)
-  3. Environment variable: `OLLAMA_MODEL` (used by `brain/intent_classifier.py:209`)
-  - Note: `n8on.py` reads installer config but does NOT read `OLLAMA_MODEL` env var for its own `MODEL` constant. `intent_classifier.py` reads both. This is an inconsistency.
+- **ProviderManager** initialised at startup in `n8on.py` from `AgentConfig`
+- **`ask_ollama()`** routes through `ProviderManager.chat()` when available
+  - Falls back to direct `requests.post()` if ProviderManager init failed
+  - Logs provider choice via `DecisionLogger`
+- **IntentClassifier** accepts optional `provider` param; when set, LLM calls go through it
+- **SmartErrorInterpreter** accepts optional `provider` param; same behavior
+- **BrainLayer** passes `_provider_mgr._local` (OllamaProvider) to classifier/interpreter
 
-### Scaffolded (code exists, not connected to production path)
+### Partially wired
 
-- `backend/providers/base.py` — abstract LLMProvider + LLMResponse
-- `backend/providers/local_ollama.py` — OllamaProvider wrapping Ollama API
-- `backend/providers/api_provider.py` — APIProvider stub (raises NotImplementedError)
-- `backend/providers/provider_manager.py` — ProviderManager with local/api/auto modes
-- `backend/providers/network_status.py` — internet/Ollama availability detection
+- **OllamaProvider** (`providers/local_ollama.py`) — used as the active local provider
+  - Wraps the same `OLLAMA_URL/api/chat` endpoint as the legacy path
+- **APIProvider** (`providers/api_provider.py`) — stub, raises `NotImplementedError`
+  - Mode selection works: setting `provider_mode=api` will hit the stub and return a clear error
+- **Auto mode** — ProviderManager supports it; will try local then fall back to API
+  - Since API is stubbed, auto mode effectively = local mode for now
 
-**Status**: The provider abstraction is ready to be wired in. The current production code (`ask_ollama()` in `n8on.py`) still calls Ollama directly. Migration to ProviderManager is a future step.
+### Model override precedence (as implemented)
+
+1. Hardcoded default: `qwen2.5-coder:14b`
+2. `%APPDATA%/Agent n8On/config.json` → `model` field (installer-written)
+3. Environment variable: `OLLAMA_MODEL`
+4. `AgentConfig.load()` merges all three in that order
+
+Note: `n8on.py` still has its own `MODEL` global read from installer config. `AgentConfig` reads the same sources. Both are active. The `MODEL` global is used as display/status; `AgentConfig` feeds `ProviderManager`.
 
 ### Not yet implemented
 
 - Actual API provider calls (Claude, OpenAI)
-- Auto mode with fallback
-- Per-task provider selection
+- Per-task provider selection (e.g. use stronger model for complex tasks)
 
 ---
 
 ## 2. Knowledge Layer
 
-### Implemented (production path)
+### Active in production path
 
 - `skills/instructions/*.md` — 4 instruction files loaded by keyword match in `brain_layer.py`
 - `skills/n8n_blocks/*.json` — 9 node block templates
@@ -48,18 +61,18 @@ If it is not listed as "implemented" here, do not describe it as working in any 
 - `n8n_recipes.py` — 21K lines of node generation recipes
 - `brain/learned_rules.md` — manually maintained lessons learned
 
-### Scaffolded (code exists, not connected to production path)
+### Partially wired
 
-- `backend/knowledge/knowledge_selector.py` — keyword-based retrieval from:
-  - `knowledge/repair_memory/error_corrections.json` — empty, ready for entries
-  - `knowledge/instruction_packs/*.md` — 3 initial packs (http_request, google_sheets, webhook)
-  - `knowledge/templates/` — empty, ready for golden/user templates
-  - `knowledge/docs_cache/` — empty, reserved for future cached n8n docs
-
-**Status**: KnowledgeSelector is ready to be called from brain_layer.py before workflow generation. Not yet wired in.
+- **`KnowledgeSelector`** is instantiated in `BrainLayer.__init__()` and called in `_slow_path()`
+  - Retrieves `repair_hints`, `instruction_fragments`, `template_matches` before plan execution
+  - Logs which knowledge sources were used via `DecisionLogger`
+  - Retrieved context is not yet injected into LLM prompts (retrieval works, injection is next step)
+- **Instruction packs** — 3 initial packs (http_request, google_sheets, webhook) in `knowledge/instruction_packs/`
+- **Repair memory** — `knowledge/repair_memory/error_corrections.json` (empty, ready for entries)
 
 ### Not yet implemented
 
+- Knowledge context injection into LLM system prompts
 - Automatic repair memory population (from successful repairs)
 - Auto-template generation (from confirmed workflows)
 - RAG / vector search
@@ -69,74 +82,74 @@ If it is not listed as "implemented" here, do not describe it as working in any 
 
 ## 3. Offline-First Policy
 
-### Implemented
+### Active in production path
 
 - Ollama runs locally — works without internet
-- `/api/status` now reports `internet` and `effective_mode` fields
+- `/api/status` reports `internet` and `effective_mode` fields (refreshed each status check)
 - `NetworkStatus` class detects internet + Ollama availability
+- `ProviderManager` respects mode: `local` never attempts API; `auto` tries local first
+- If `provider_mode=api` and API is not implemented, returns explicit error (not silent failure)
 
-### Scaffolded
+### Partially wired
 
 - `agent_config.py` supports `knowledge_mode: local_first | local_only`
+- `KnowledgeSelector` only searches local files (no online augmentation path exists yet)
 
 ### Not yet implemented
 
-- Runtime enforcement: code does not yet block API calls when offline
 - Honest degradation messaging to user when knowledge is limited
-- Online augmentation path
+- Online documentation fetch when internet is available
 
 ---
 
 ## 4. Configuration
 
-### Implemented (production path)
+### Active in production path
 
-- `OLLAMA_URL` hardcoded + env var override
-- `MODEL` hardcoded + installer config override
-- `N8N_URL` hardcoded + env var override
-- `WEB_PORT` hardcoded
+- **`AgentConfig`** loaded at startup in `n8on.py`, used to initialise:
+  - `ProviderManager` (ollama_url, model, provider_mode, api_key)
+  - `NetworkStatus` (ollama_url)
+  - `/api/status` response (provider_mode, knowledge_mode)
+- Load precedence: hardcoded defaults → installer config.json → env vars
+- Legacy `OLLAMA_URL` / `MODEL` globals still exist and are used by direct Ollama calls
 
-### Scaffolded
+### Not yet implemented
 
-- `backend/agent_config.py` — unified AgentConfig with load precedence:
-  1. Hardcoded defaults
-  2. `%APPDATA%/Agent n8On/config.json`
-  3. Environment variables
-- Supports new fields: `provider_mode`, `api_key`, `knowledge_mode`, `installed_by_agent`
-
-**Status**: AgentConfig is loaded and used by `/api/status`. Not yet used by `ask_ollama()` or other production code paths.
+- Config hot-reload (requires restart)
+- UI settings page
+- Config validation warnings
 
 ---
 
 ## 5. Logging
 
-### Implemented (production path)
+### Active in production path
 
 - `print()` statements in brain components
 - Chat history saved to `memory/chat_history.json`
 - Intent cache in `memory/intent_cache.json`
 - Session state in `memory/session_state.json`
-
-### Scaffolded
-
-- `backend/decision_logger.py` — JSON-lines logger for:
-  - routing decisions (FAST/SLOW/CLARIFY)
-  - provider selection
-  - knowledge sources used
-  - repair attempts
-  - user confirmations
+- **`DecisionLogger`** wired into:
+  - `ask_ollama()` — logs provider choice + fallback status + network state
+  - `BrainLayer.handle()` — logs routing decision (FAST/SLOW/CLARIFY)
+  - `BrainLayer._slow_path()` — logs knowledge sources used
+  - `BrainLayer._handle_step_failure()` — logs repair/failure events
 - Writes to `%APPDATA%/Agent n8On/decisions.jsonl` (or `backend/memory/decisions.jsonl`)
 
-**Status**: DecisionLogger is ready to be called from brain_layer.py and n8on.py. Not yet wired in.
+### Not yet implemented
+
+- Log rotation / size limits
+- Log viewer in UI
+- Confirmation event logging (wired but no user confirmation flow triggers it yet)
 
 ---
 
 ## 6. UI
 
-### Implemented
+### Active in production path
 
 - Status badge: shows Ollama connected/disconnected + model name
-- Status badge now also shows: provider_mode (if not local), offline indicator
+- Status badge shows provider_mode (if not local) and offline indicator
 - Status endpoint returns: `provider_mode`, `knowledge_mode`, `internet`, `effective_mode`
 
 ### Not yet implemented
@@ -149,22 +162,26 @@ If it is not listed as "implemented" here, do not describe it as working in any 
 
 ## 7. Brain Layer
 
-### Implemented (production path)
+### Active in production path
 
 - Router: FAST/SLOW/CLARIFY classification (regex + action verb counting)
 - IntentClassifier: LLM-based semantic classification with 15+ intents
-- Planner: converts intent to ordered PlanSteps
-- Executor: runs steps with dependency handling
-- Verifier: checks execution results
-- ErrorInterpreter: maps errors to human-readable explanations
+  - Now routes through ProviderManager (OllamaProvider) when available
+- Planner: converts intent to ordered PlanSteps (no LLM)
+- Executor: runs steps with dependency handling (no LLM)
+- Verifier: checks execution results (no LLM)
+- ErrorInterpreter: rule-based error mapping (no LLM)
+- SmartErrorInterpreter: LLM-based error analysis
+  - Now routes through ProviderManager when available
 - BrainLayer: orchestrator with pending state machine for confirmations
 - Skill discovery: keyword-based matching in `_SKILL_KEYWORDS`
+- Knowledge retrieval: KnowledgeSelector called in `_slow_path()` (retrieval active, injection pending)
+- Decision logging: routing, knowledge, and repair events logged
 
 ### Not yet implemented
 
-- Knowledge injection into LLM prompts (via KnowledgeSelector)
+- Knowledge context injection into LLM prompts
 - Provider-aware routing (choose model by task complexity)
-- Structured logging of brain decisions
 
 ---
 
@@ -181,11 +198,27 @@ If it is not listed as "implemented" here, do not describe it as working in any 
 - `installed_by_agent` flag in config.json
 - Uninstaller cleanup dialog
 - Conditional removal of Ollama/Node.js/n8n
-- Cleanup of `%APPDATA%/Agent n8On/` and `%LOCALAPPDATA%/Agent n8On/`
+
+**Installer rebuild required?** No — the new code is backward compatible. If `ProviderManager` fails to init, `ask_ollama()` falls back to the legacy direct Ollama call. No new config fields are required by the installer.
 
 ---
 
-## 9. Non-n8n Skills (broad assistant features)
+## 9. Integration Points Summary
+
+| Call Site | File | Before | After |
+|-----------|------|--------|-------|
+| `ask_ollama()` | `n8on.py` | Direct `requests.post()` | `ProviderManager.chat()` with legacy fallback |
+| `IntentClassifier._classify_with_llm()` | `intent_classifier.py` | Direct `requests.post()` | `provider.chat()` if provider set, else legacy |
+| `SmartErrorInterpreter.interpret()` | `intent_classifier.py` | Direct `requests.post()` | `provider.chat()` if provider set, else legacy |
+| `BrainLayer.__init__()` | `brain_layer.py` | No provider param | Accepts `provider`, passes to classifier/interpreter |
+| `BrainLayer._slow_path()` | `brain_layer.py` | Skills only | Skills + KnowledgeSelector retrieval |
+| `BrainLayer.handle()` | `brain_layer.py` | No logging | DecisionLogger logs routing |
+| `BrainLayer._handle_step_failure()` | `brain_layer.py` | No logging | DecisionLogger logs repair events |
+| BrainLayer init in `n8on.py` | `n8on.py` | No provider | Passes `_provider_mgr._local` |
+
+---
+
+## 10. Non-n8n Skills (broad assistant features)
 
 ### Present in code but secondary to n8n-first focus
 
