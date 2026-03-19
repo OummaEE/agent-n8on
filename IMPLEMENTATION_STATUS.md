@@ -45,6 +45,7 @@ If it is not listed as "implemented" here, do not describe it as working in any 
 ### Active in production path
 
 - `skills/instructions/*.md` — 4 instruction files loaded by keyword match in `brain_layer.py`
+  - `debug_n8n_workflow.md` — now includes confidence levels (CONFIRMED/LIKELY/UNCONFIRMED/BAILOUT) and bailout triggers
 - `skills/n8n_blocks/*.json` — 9 node block templates
 - `skills/n8n_templates/*.json` — 3 pre-built workflow templates
 - `n8n_recipes.py` — 21K lines of node generation recipes
@@ -56,12 +57,36 @@ If it is not listed as "implemented" here, do not describe it as working in any 
   - Retrieves `repair_hints`, `instruction_fragments`, `template_matches` before plan execution
   - Logs which knowledge sources were used via `DecisionLogger`
   - Retrieved context is not yet injected into LLM prompts (retrieval works, injection is next step)
-- **Instruction packs** — 3 initial packs (http_request, google_sheets, webhook) in `knowledge/instruction_packs/`
+  - **Keyword index** (`_KEYWORD_INDEX`) maps task words to pack filenames for reliable retrieval
+- **Instruction packs** — 6 packs in `knowledge/instruction_packs/`:
+  - `http_request_patterns.md` — HTTP Request node params, errors, best practices
+  - `google_sheets_patterns.md` — Google Sheets node patterns
+  - `webhook_patterns.md` — Webhook node patterns
+  - `n8n_terminology.md` — canonical n8n terms for workflow generation, error messages, repair explanations (adapted from n8n content-design)
+  - `error_message_patterns.md` — "what + why + what to do" error formula, error type reference, repair/bailout phrasing (adapted from n8n content-design)
+  - `debug_routing_confidence.md` — failure area routing table, confidence scoring (CONFIRMED/LIKELY/UNCONFIRMED/BAILOUT), hard bailout triggers, hypothesis structure (adapted from n8n reproduce-bug)
 - **Repair memory** — `knowledge/repair_memory/error_corrections.json` (empty, ready for entries)
+
+### What these packs influence (when retrieval is active, injection is NOT yet wired)
+
+- **n8n_terminology** — retrieved on: workflow/node/trigger/credential/create/generate/build tasks
+- **error_message_patterns** — retrieved on: error/fail/broken/repair/fix/timeout tasks
+- **debug_routing_confidence** — retrieved on: debug/execution/repair/fix/diagnose/bailout tasks
+
+### Honest status of confidence scoring and bailout logic
+
+- The instruction packs **define** confidence levels and bailout triggers
+- KnowledgeSelector **retrieves** them when task keywords match
+- `_handle_step_failure()` does **NOT** yet read confidence levels from retrieved context
+- `_handle_step_failure()` does **NOT** yet implement bailout logic based on these triggers
+- These packs are **reference material for the LLM** — they improve LLM output quality IF/WHEN knowledge injection into prompts is wired
+- Currently: retrieved fragments are logged but not passed to the LLM system prompt
 
 ### Not yet implemented
 
-- Knowledge context injection into LLM system prompts
+- **Knowledge context injection into LLM system prompts** — this is the critical next step; without it, packs are retrieved but not used by the model
+- Confidence scoring in `_handle_step_failure()` (currently always attempts repair)
+- Bailout logic in `_handle_step_failure()` (currently relies on MAX_RETRIES only)
 - Automatic repair memory population (from successful repairs)
 - Auto-template generation (from confirmed workflows)
 - RAG / vector search

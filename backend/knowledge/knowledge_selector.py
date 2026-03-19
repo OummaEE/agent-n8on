@@ -23,6 +23,42 @@ _TEMPLATES_DIR = _KNOWLEDGE_DIR / "templates"
 _DOCS_CACHE_DIR = _KNOWLEDGE_DIR / "docs_cache"
 
 
+# Explicit keyword-to-pack mapping.
+# Maps task keywords to instruction pack filenames (stems).
+# Used when filename-based matching would miss relevant packs.
+_KEYWORD_INDEX: Dict[str, List[str]] = {
+    # n8n_terminology — retrieved for any workflow generation or naming task
+    "workflow": ["n8n_terminology"],
+    "node": ["n8n_terminology"],
+    "trigger": ["n8n_terminology"],
+    "credential": ["n8n_terminology"],
+    "create": ["n8n_terminology"],
+    "generate": ["n8n_terminology"],
+    "build": ["n8n_terminology"],
+    "name": ["n8n_terminology"],
+    "naming": ["n8n_terminology"],
+    # error_message_patterns — retrieved for error/repair contexts
+    "error": ["error_message_patterns"],
+    "fail": ["error_message_patterns"],
+    "failed": ["error_message_patterns"],
+    "broken": ["error_message_patterns"],
+    "repair": ["error_message_patterns", "debug_routing_confidence"],
+    "fix": ["error_message_patterns", "debug_routing_confidence"],
+    # debug_routing_confidence — retrieved for debug/repair tasks
+    "debug": ["debug_routing_confidence"],
+    "execution": ["debug_routing_confidence"],
+    "inspect": ["debug_routing_confidence"],
+    "diagnose": ["debug_routing_confidence"],
+    "bailout": ["debug_routing_confidence"],
+    "confidence": ["debug_routing_confidence"],
+    "timeout": ["debug_routing_confidence", "error_message_patterns"],
+    "401": ["debug_routing_confidence", "error_message_patterns"],
+    "403": ["debug_routing_confidence", "error_message_patterns"],
+    "429": ["debug_routing_confidence", "error_message_patterns"],
+    "404": ["debug_routing_confidence", "error_message_patterns"],
+}
+
+
 class KnowledgeSelector:
     """Retrieve relevant context fragments for a given task."""
 
@@ -101,28 +137,48 @@ class KnowledgeSelector:
     ) -> List[str]:
         """Find instruction fragments relevant to the task or node types."""
         results = []
+        matched_stems: set = set()
         task_lower = task.lower()
+        task_words = [w for w in task_lower.split() if len(w) > 2]
 
-        # Search instruction_packs/
-        for md_file in _INSTRUCTION_PACKS_DIR.glob("*.md"):
-            name = md_file.stem.lower().replace("_", " ").replace("-", " ")
-            # Match if node type mentioned or task keywords overlap
-            if node_types:
+        # Phase 1: keyword index lookup (explicit mapping, catches short words like "fix")
+        for word in task_words:
+            for stem in _KEYWORD_INDEX.get(word, []):
+                if stem not in matched_stems:
+                    pack_file = _INSTRUCTION_PACKS_DIR / f"{stem}.md"
+                    if pack_file.exists():
+                        results.append(pack_file.read_text(encoding="utf-8")[:2000])
+                        matched_stems.add(stem)
+
+        # Phase 2: node-type matching (e.g. "httpRequest" -> http_request_patterns.md)
+        if node_types:
+            for md_file in _INSTRUCTION_PACKS_DIR.glob("*.md"):
+                if md_file.stem in matched_stems:
+                    continue
+                name = md_file.stem.lower().replace("_", " ").replace("-", " ")
                 for nt in node_types:
                     if nt.lower().replace("n8n-nodes-base.", "") in name:
                         results.append(md_file.read_text(encoding="utf-8")[:2000])
+                        matched_stems.add(md_file.stem)
                         break
-            elif any(word in name for word in task_lower.split() if len(word) > 3):
-                results.append(md_file.read_text(encoding="utf-8")[:2000])
 
-        # Also check legacy skills/instructions/ if provided
+        # Phase 3: filename word matching (fallback for packs not in keyword index)
+        for md_file in _INSTRUCTION_PACKS_DIR.glob("*.md"):
+            if md_file.stem in matched_stems:
+                continue
+            name = md_file.stem.lower().replace("_", " ").replace("-", " ")
+            if any(word in name for word in task_words if len(word) > 3):
+                results.append(md_file.read_text(encoding="utf-8")[:2000])
+                matched_stems.add(md_file.stem)
+
+        # Phase 4: legacy skills/instructions/ (backward compat)
         if self._extra_skills_dir and self._extra_skills_dir.exists():
             for md_file in self._extra_skills_dir.glob("*.md"):
                 name = md_file.stem.lower()
-                if any(word in name for word in task_lower.split() if len(word) > 3):
+                if any(word in name for word in task_words if len(word) > 3):
                     results.append(md_file.read_text(encoding="utf-8")[:2000])
 
-        return results[:3]  # limit to avoid prompt bloat
+        return results[:5]  # limit to avoid prompt bloat
 
     def _search_templates(self, task: str) -> List[str]:
         """Find template files matching the task description."""
