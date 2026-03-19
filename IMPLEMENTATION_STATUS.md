@@ -1,16 +1,10 @@
 # IMPLEMENTATION_STATUS.md
 
-Last updated: 2026-03-18
+Last updated: 2026-03-19
 
-This document tracks what is **actually implemented and working** vs what is **partially wired** vs what is **scaffolded** vs what is **planned only**.
+This document tracks what is **actually implemented and working** vs what is **scaffolded** vs what is **planned only**.
 
-If it is not listed as "implemented" or "wired" here, do not describe it as working in any doc or UI.
-
-Status levels:
-- **active in production path** — code runs in the real request flow
-- **partially wired** — code is connected but not all features are live
-- **scaffolded** — code exists, not connected to production
-- **planned** — design only, no code
+If it is not listed as "implemented" here, do not describe it as working in any doc or UI.
 
 ---
 
@@ -29,11 +23,8 @@ Status levels:
 ### Partially wired
 
 - **OllamaProvider** (`providers/local_ollama.py`) — used as the active local provider
-  - Wraps the same `OLLAMA_URL/api/chat` endpoint as the legacy path
 - **APIProvider** (`providers/api_provider.py`) — stub, raises `NotImplementedError`
-  - Mode selection works: setting `provider_mode=api` will hit the stub and return a clear error
 - **Auto mode** — ProviderManager supports it; will try local then fall back to API
-  - Since API is stubbed, auto mode effectively = local mode for now
 
 ### Model override precedence (as implemented)
 
@@ -41,8 +32,6 @@ Status levels:
 2. `%APPDATA%/Agent n8On/config.json` → `model` field (installer-written)
 3. Environment variable: `OLLAMA_MODEL`
 4. `AgentConfig.load()` merges all three in that order
-
-Note: `n8on.py` still has its own `MODEL` global read from installer config. `AgentConfig` reads the same sources. Both are active. The `MODEL` global is used as display/status; `AgentConfig` feeds `ProviderManager`.
 
 ### Not yet implemented
 
@@ -185,6 +174,7 @@ Note: `n8on.py` still has its own `MODEL` global read from installer config. `Ag
 ### Active in production path
 
 - Router: FAST/SLOW/CLARIFY classification (regex + action verb counting)
+- Router.route_with_reason(): returns (path, reason) for structured logging
 - IntentClassifier: LLM-based semantic classification with 15+ intents
   - Now routes through ProviderManager (OllamaProvider) when available
 - Planner: converts intent to ordered PlanSteps (no LLM)
@@ -196,7 +186,7 @@ Note: `n8on.py` still has its own `MODEL` global read from installer config. `Ag
 - BrainLayer: orchestrator with pending state machine for confirmations
 - Skill discovery: keyword-based matching in `_SKILL_KEYWORDS`
 - Knowledge retrieval: KnowledgeSelector called in `_slow_path()` (retrieval active, injection pending)
-- Decision logging: routing, knowledge, and repair events logged
+- Decision logging: routing, knowledge, execution, repair, and confirmation events logged
 
 ### Not yet implemented
 
