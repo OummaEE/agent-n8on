@@ -1,3 +1,9 @@
+# Secrets — NEVER commit .env files with real credentials
+.env
+*.env
+!.env.example
+!**/.env.example
+
 # Python
 __pycache__/
 *.pyc
