@@ -1,331 +1,230 @@
-# ROADMAP.md
+# ROADMAP
 
-## Принцип приоритизации
+## Purpose
+This roadmap captures what still needs to be built next.
 
-Каждая фаза должна усиливать core loop:
+Unlike `IMPLEMENTATION_STATUS.md`, this file is about **future implementation priorities**, not current verified reality.
 
-```
-запрос → n8n workflow → валидация → исполнение → repair → подтверждение
-```
+The main rule is simple:
+**each phase should make the core loop more reliable, more accurate, or more usable on real user machines.**
 
-Если фича не делает этот цикл быстрее, точнее или надёжнее — она ждёт.
+Core loop:
+request -> routing -> provider choice -> knowledge retrieval -> workflow generation -> validation -> execution -> repair -> user confirmation
 
 ---
 
-## Фаза -1: Архитектурный фундамент (scaffolded)
+## Фаза -1: Архитектурный фундамент (wired into production)
 
-**Статус:** scaffolded (код написан, не подключён к production path)
+**Статус:** wired into production path
 
-**Дата:** 2026-03-18
+**Дата:** 2026-03-18 (scaffolded) → 2026-03-19 (wired)
 
 **Что сделано:**
-- [x] Provider layer skeleton: `backend/providers/` (base, local_ollama, api_provider, provider_manager)
+- [x] Provider layer: `backend/providers/` (base, local_ollama, api_provider, provider_manager)
 - [x] Network status detection: `backend/providers/network_status.py`
-- [x] Knowledge layer scaffold: `backend/knowledge/` (knowledge_selector, instruction_packs, repair_memory, templates)
+- [x] Knowledge layer: `backend/knowledge/` (knowledge_selector, instruction_packs, repair_memory, templates)
 - [x] 3 initial instruction packs: http_request, google_sheets, webhook
 - [x] Unified config: `backend/agent_config.py` (load precedence: defaults < installer < env)
-- [x] Decision logger: `backend/decision_logger.py` (JSON-lines for routing/provider/knowledge/repair)
-- [x] UI status extended: `/api/status` now returns provider_mode, internet, effective_mode
+- [x] Decision logger: `backend/decision_logger.py` — 6 event types, all active
+- [x] UI status extended: `/api/status` returns provider_mode, internet, effective_mode
 - [x] `IMPLEMENTATION_STATUS.md` — honest tracking of implemented vs scaffolded vs planned
+- [x] Wired ProviderManager into production `ask_ollama()` path
+- [x] Wired KnowledgeSelector into brain_layer.py `_slow_path()`
+- [x] Wired DecisionLogger into brain_layer.py, executor.py, n8on.py (6 event types)
 
-**Что НЕ сделано (намеренно):**
-- [ ] Wiring ProviderManager into production `ask_ollama()` path
-- [ ] Wiring KnowledgeSelector into brain_layer.py
-- [ ] Wiring DecisionLogger into brain_layer.py
+**Не сделано (намеренно):**
 - [ ] Actual API provider implementation (Claude/OpenAI calls)
 - [ ] RAG / vector DB
 - [ ] Plugin architecture
-
-**Следующий шаг:** подключить scaffolded компоненты к production path после завершения Фазы 0 (Windows install test).
 
 Подробнее о статусе каждого компонента: см. `IMPLEMENTATION_STATUS.md`
 
 ---
 
 ## Фаза 0: Завершение Windows-установки
+Goal: confirm the latest installer/runtime fixes on clean Windows.
 
-**Статус:** в процессе тестирования
+Tasks:
+- final clean Windows test after the latest rebuild,
+- verify runtime download and unpack,
+- verify n8n startup,
+- verify backend can find Python correctly,
+- verify first-run behavior,
+- verify logs are usable when failure occurs.
 
-**Контекст:**
-- Runtime собран, залит в GitHub Releases
-- Installer пересобран после исправления бага с `\\?\` путями
-- Финальная сборка готова к тестированию на Azure VM
-
-**Что осталось:**
-- [ ] Провести полный тест установки на чистой Windows VM
-- [ ] Проверить: скачивание runtime, распаковка, запуск n8n, запуск backend
-- [ ] Проверить корректность путей (без `\\?\` проблем)
-- [ ] Подтвердить работоспособность end-to-end (UI → brain → n8n → результат)
-
-**Блокирует:** все последующие фазы
+Success condition:
+- installer works end-to-end on clean Windows after the latest fixes.
 
 ---
 
-## Фаза 1: Uninstaller — чистое удаление
+## Phase 1 — Full lifecycle management (installer + uninstaller)
+Goal: make install and uninstall honest and complete.
 
-**Связь с core loop:** installer reliability (приоритет #1 в CLAUDE.md)
+Tasks:
+- add `installed_by_agent` metadata for managed dependencies,
+- add uninstall prompt for optional removal of Ollama and models,
+- stop Ollama before cleanup,
+- remove agent-installed Node.js only if ownership metadata confirms it,
+- uninstall agent-installed global `n8n`,
+- always remove app-specific config/cache/log folders,
+- show the user what will be removed and what space may be freed.
 
-### 1.1 Флаг `installed_by_agent`
-
-При установке записывать в `%APPDATA%/Agent n8On/config.json`:
-
-```json
-{
-  "installed_by_agent": {
-    "ollama": true,
-    "nodejs": true,
-    "n8n": true
-  }
-}
-```
-
-Если компонент уже был установлен до агента — `false`.
-
-### 1.2 Диалог при удалении
-
-В NSIS uninstaller показать диалог:
-
-```
-Удалить также Ollama и скачанные AI-модели?
-Это освободит примерно X ГБ.
-[Да] [Нет, оставить]
-```
-
-### 1.3 Логика удаления
-
-**Всегда удалять:**
-- `%APPDATA%/Agent n8On/`
-- `%LOCALAPPDATA%/Agent n8On/`
-
-**По запросу пользователя (только если `installed_by_agent == true`):**
-- Остановить процесс Ollama (`taskkill /F /IM ollama.exe`)
-- Запустить Ollama silent uninstaller или удалить папку
-- Удалить `~/.ollama/models/` (модели)
-- Удалить Node.js (только если установлен агентом)
-- `npm uninstall -g n8n`
-
-**Никогда не удалять**, если компонент был до агента.
-
-### 1.4 Задачи
-
-- [ ] Добавить запись `installed_by_agent` в installer
-- [ ] Добавить диалог в NSIS uninstaller
-- [ ] Реализовать логику условного удаления
-- [ ] Расчёт освобождаемого пространства для отображения в диалоге
-- [ ] Тестирование на Windows VM
+Success condition:
+- install and uninstall lifecycle is reliable and does not leave unmanaged mess behind.
 
 ---
 
-## Фаза 2: Error-Correction Memory ("Грабли")
+## Phase 2 — Provider layer (`local`, `api`, `auto`)
+Goal: stop depending on a single local-only model path.
 
-**Связь с core loop:** repair loop quality (приоритет #4 в CLAUDE.md)
+Tasks:
+- add provider abstraction,
+- support local-only mode,
+- support API-only mode,
+- support auto mode,
+- choose provider based on online/offline state, task complexity, and local capability,
+- expose provider status to the UI.
 
-### Идея
+Why this matters:
+- weak local machines may not generate workflows reliably,
+- users need a fallback path,
+- the product must be honest about what path is actually being used.
 
-При каждом успешном repair — логировать пару `ошибка → исправление`.
-При следующем repair — сначала проверять "грабли" на совпадение.
-
-### Реализация
-
-1. Хранилище: SQLite или JSON-файл в `/memory/error_corrections.json`
-2. Формат записи:
-   ```json
-   {
-     "error_pattern": "Cannot read property 'json' of undefined",
-     "node_type": "HttpRequest",
-     "fix_applied": "Changed responseFormat from 'string' to 'json'",
-     "success_count": 3,
-     "last_used": "2026-03-15"
-   }
-   ```
-3. Интеграция: в `brain/error_interpreter.py` добавить поиск по базе перед LLM-анализом
-4. Порог доверия: применять автоматически, если `success_count >= 3`
-
-### Задачи
-
-- [ ] Определить схему хранения (JSON vs SQLite)
-- [ ] Реализовать запись при успешном repair
-- [ ] Реализовать поиск по базе в error_interpreter
-- [ ] Добавить логирование применения известного решения
-- [ ] Тестирование на реальных сценариях repair
+Success condition:
+- the system can intentionally choose between local and API generation instead of being hard-wired to Ollama only.
 
 ---
 
-## Фаза 3: Self-Growing Library (авто-шаблоны)
+## Phase 3 — Offline-first n8n knowledge layer
+Goal: make the agent strong through n8n-specific knowledge, not only through raw model strength.
 
-**Связь с core loop:** ускоряет генерацию, повышает точность
+Tasks:
+- create a local n8n knowledge folder,
+- store node docs, patterns, schemas, examples, and recipes,
+- make the system retrieve relevant n8n context before generation,
+- prefer local knowledge first,
+- support online augmentation when internet is available.
 
-### Идея
+Why this matters:
+- the product is n8n-first,
+- weak local models need targeted help,
+- offline users still need useful workflow generation support.
 
-При успешном завершении workflow (подтверждение пользователя) — сохранять очищенный шаблон для повторного использования.
-
-### Реализация
-
-1. **Триггер:** user confirmation → экспорт workflow JSON
-2. **Key Stripping:**
-   - Regex по полям `credentials`, `password`, `apiKey`, `token`, `secret`
-   - Замена значений на `{{USER_KEY_REQUIRED}}`
-   - Удаление `staticData` (содержит runtime-состояние)
-3. **Хранение:** `/user_data/library/` с метаданными:
-   ```json
-   {
-     "original_request": "Отправляй мне погоду в Telegram каждое утро",
-     "nodes_used": ["Cron", "HttpRequest", "Telegram"],
-     "created": "2026-03-15",
-     "reuse_count": 0
-   }
-   ```
-4. **Поиск:** при новом запросе — fuzzy match по `original_request` и `nodes_used`
-5. **Приоритет:** найденный шаблон адаптируется, а не генерируется с нуля
-
-### Задачи
-
-- [ ] Реализовать Key Stripping (regex + поиск по credentials)
-- [ ] Реализовать сохранение при user confirmation
-- [ ] Реализовать поиск по библиотеке шаблонов
-- [ ] Интегрировать в workflow_generator (шаблон как основа)
-- [ ] Тестирование: создать workflow → подтвердить → повторить запрос → убедиться, что шаблон используется
+Success condition:
+- the agent can retrieve relevant n8n knowledge even without internet.
 
 ---
 
-## Фаза 4: Golden Templates (ручная курация)
+## Phase 4 — Error-correction memory (“грабли”)
+Goal: stop repeating the same repair mistakes.
 
-**Связь с core loop:** уменьшает ошибки генерации для сложных нод
+Tasks:
+- log recurring failure patterns,
+- log which fixes actually worked,
+- reuse known corrections before new blind repair attempts,
+- store and retrieve repair patterns by error type.
 
-### Идея
-
-Создать эталонные JSON-структуры для самых проблемных нод n8n.
-
-### Целевые ноды (топ-20)
-
-Сложные/часто ломающиеся:
-1. Google Sheets (OAuth + scopes + range format)
-2. Gmail (MIME, attachments, labels)
-3. HTTP Request (auth types, pagination, binary)
-4. Webhook (response modes, binary data)
-5. Postgres/MySQL (parameterized queries, connection pooling)
-6. Telegram Bot (keyboards, file uploads, callbacks)
-7. Slack (blocks, threads, file sharing)
-8. Code node (sandboxing, $input vs $json)
-9. IF/Switch (expression syntax v1.0+)
-10. Merge (modes: append, combine, multiplex)
-11. Set (dot notation, type coercion)
-12. Function (deprecated vs Code node migration)
-13. Airtable (field types, linked records)
-14. S3/MinIO (presigned URLs, multipart)
-15. OpenAI/Claude (streaming, function calling)
-16. Cron/Schedule (timezone handling)
-17. RSS Feed (parsing edge cases)
-18. XML (namespaces, attributes)
-19. Wait (webhook resume vs timer)
-20. Error Trigger (workflow error handling patterns)
-
-### Формат шаблона
-
-```json
-{
-  "node_type": "n8n-nodes-base.googleSheets",
-  "display_name": "Google Sheets",
-  "common_errors": ["Invalid range", "Permission denied"],
-  "required_fields": ["operation", "sheetId", "range"],
-  "template": { ... },
-  "notes": "Range must be in A1 notation. OAuth2 scope must include spreadsheets."
-}
-```
-
-### Хранение
-
-`/skills/templates/golden/` — отдельные JSON-файлы по нодам.
-
-### Задачи
-
-- [ ] Проанализировать текущие recipes в `n8n_recipes.py` (21K строк) — что уже покрыто
-- [ ] Создать golden templates для первых 10 нод
-- [ ] Интегрировать в workflow_generator
-- [ ] Создать golden templates для нод 11-20
-- [ ] Документировать формат для будущих контрибьюторов
+Success condition:
+- similar workflow failures are repaired faster using known successful fixes.
 
 ---
 
-## Фаза 5: RAG по документации n8n (Context Injection)
+## Phase 5 — Minimal Golden Templates / BlockLibrary
+Goal: stop regenerating the hardest n8n structures from scratch.
 
-**Связь с core loop:** точность генерации для редких нод
+Tasks:
+- choose a small set of high-value node patterns first,
+- build trusted JSON templates for those patterns,
+- reuse them in generation and repair,
+- keep them versioned and inspectable.
 
-**Условие запуска:** только если фазы 2-4 не дают достаточной точности.
+Suggested first targets:
+- HTTP Request,
+- Wait / retry / backoff,
+- Google Sheets append-or-update,
+- binary-data handling,
+- expression-heavy mappings.
 
-### Риски
-
-- Новая зависимость (ChromaDB/FAISS) усложняет установку
-- Нужно поддерживать актуальность индекса при обновлениях n8n
-- Увеличивает размер дистрибутива
-
-### Предварительный план
-
-1. Выбор: FAISS (легче, без сервера) vs ChromaDB (удобнее API)
-2. Индексация: официальная документация n8n по нодам
-3. Запрос: пользователь упоминает ноду → подтягиваются релевантные фрагменты
-4. Интеграция: фрагменты добавляются в промпт перед генерацией
-
-### Альтернатива (проще)
-
-Вместо полного RAG — статический JSON-индекс с ключевыми правилами для каждой ноды. По сути, расширенные golden templates. Это не требует векторной БД.
-
-### Задачи
-
-- [ ] Оценить, достаточно ли golden templates
-- [ ] Если нет — выбрать между FAISS и статическим индексом
-- [ ] Реализовать индексацию
-- [ ] Интегрировать в brain layer
-- [ ] Тестирование на редких нодах
+Success condition:
+- the system reduces avoidable structural errors by relying on trusted blocks.
 
 ---
 
-## Фаза 6: Plugin Architecture (будущее)
+## Phase 6 — Self-growing workflow library
+Goal: turn successful workflows into reusable assets.
 
-**Условие запуска:** наличие пользовательской базы и запросов на расширение.
+Tasks:
+- export successful workflow JSON after real success,
+- sanitize secrets,
+- save reusable local workflow templates,
+- search the local library before generating from scratch.
 
-### Текущее состояние
-
-`/skills/instructions/` уже работает как простая plugin-система:
-- `debug_n8n_workflow.md`
-- `create_complex_workflow.md`
-- `handle_api_errors.md`
-- `learned_lessons.md`
-
-### Когда формализовать
-
-- Когда появятся внешние контрибьюторы
-- Когда текущей системы skills станет недостаточно
-- Когда будет clear demand на специализированные плагины (Facebook Ads, SAP и т.д.)
-
-### Предварительный план
-
-1. Формализовать формат плагина (JSON-схема)
-2. Добавить автозагрузку из `/plugins/`
-3. Валидация плагинов при загрузке
-4. Документация для контрибьюторов
+Success condition:
+- repeated tasks get faster and more reliable because successful workflows are reused.
 
 ---
 
-## Не планируется в ближайшее время
+## Phase 7 — Online augmentation / optional RAG expansion
+Goal: improve difficult or rare-node generation when local knowledge is not enough.
 
-| Фича | Причина отложения |
-|-------|-------------------|
-| Marketplace плагинов | Нет пользовательской базы |
-| Облачный хостинг | Противоречит "one-click local setup" |
-| Enterprise-плагины | Преждевременная монетизация |
-| Мультимодельный роутинг | Текущая архитектура Ollama + API достаточна |
+Tasks:
+- optionally retrieve fresh online documentation,
+- optionally add vector retrieval over local knowledge if simpler retrieval is insufficient,
+- keep this optional and modular.
+
+Important constraint:
+- do not make the base product depend entirely on this,
+- offline-first behavior must remain valid.
+
+Success condition:
+- rare or complex tasks improve when internet is available, without making offline users helpless.
 
 ---
 
-## Метрики успеха по фазам
+## Phase 8 — Skills / knowledge packs refinement
+Goal: convert the most useful external knowledge into n8n-relevant local instruction packs.
 
-| Фаза | Метрика |
-|-------|---------|
-| 0 | Установка на чистую Windows работает end-to-end |
-| 1 | Чистое удаление, пользовательские компоненты не затронуты |
-| 2 | Повторные ошибки исправляются быстрее (измерить: кол-во repair-итераций) |
-| 3 | Повторные запросы генерируются быстрее и точнее |
-| 4 | Уменьшение ошибок генерации для сложных нод |
-| 5 | Точность генерации для редких нод > 80% |
-| 6 | Внешние контрибьюторы могут добавлять плагины без изменения ядра |
+Tasks:
+- identify the most valuable skills/packs for n8n workflows,
+- normalize them into local instruction or template packs,
+- avoid dumping everything into the core agent,
+- keep the system inspectable and focused.
+
+Success condition:
+- the product gains narrow, high-value expertise without feature sprawl.
+
+---
+
+## Phase 9 — Formal plugin architecture (later)
+Goal: support cleaner extensibility only after the core is strong.
+
+Tasks:
+- formalize plugin loading rules,
+- define safe interfaces,
+- keep plugins versioned and optional,
+- avoid turning the core into a marketplace too early.
+
+Success condition:
+- plugins exist as a clean extension mechanism, not as chaos.
+
+---
+
+## Prioritization rule
+Do **not** build later phases just because they sound smart.
+A later phase should only move up if it clearly improves:
+- workflow quality,
+- repair quality,
+- offline usability,
+- weak-machine usability,
+- installation reliability.
+
+---
+
+## Things deliberately not treated as done
+This roadmap assumes the following are **not yet complete** until verified:
+- final Windows installer stability after the latest fixes,
+- hybrid provider selection,
+- local n8n docs retrieval,
+- strong offline knowledge mode,
+- mature self-growing workflow library,
+- mature plugin system.
