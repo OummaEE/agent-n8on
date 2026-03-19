@@ -2,6 +2,10 @@
 IntentClassifier — семантический классификатор намерений на базе LLM.
 Вместо regex и ключевых слов — понимание смысла через Ollama.
 Включает кэширование частых паттернов для скорости.
+
+Supports optional ProviderManager injection: if a provider is passed,
+LLM calls go through it (supporting local/api/auto modes).
+If no provider is passed, falls back to direct Ollama HTTP (backward compat).
 """
 import json
 import hashlib
@@ -11,7 +15,10 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from providers.base import LLMProvider
 
 
 # ==============================================================================
@@ -204,10 +211,12 @@ class IntentClassifier:
         model: str = None,
         timeout: int = 45,
         cache_dir: Optional[Path] = None,
+        provider: Optional["LLMProvider"] = None,
     ):
         self.ollama_url = ollama_url or os.environ.get("OLLAMA_URL", "http://localhost:11434")
         self.model = model or os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:14b")
         self.timeout = timeout
+        self._provider = provider  # If set, LLM calls go through ProviderManager
         if cache_dir:
             self._cache_file = Path(cache_dir) / "intent_cache.json"
             self._load_cache()
@@ -344,21 +353,30 @@ class IntentClassifier:
 {user_message}"""
 
         try:
-            resp = requests.post(
-                f"{self.ollama_url}/api/chat",
-                json={
-                    "model": self.model,
-                    "messages": [
-                        {"role": "system", "content": CLASSIFIER_SYSTEM_PROMPT},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    "stream": False,
-                    "options": {"temperature": 0.1, "num_predict": 1500},
-                },
-                timeout=self.timeout,
-            )
-            resp.raise_for_status()
-            answer = resp.json().get("message", {}).get("content", "")
+            messages = [
+                {"role": "system", "content": CLASSIFIER_SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ]
+            if self._provider is not None:
+                # Route through ProviderManager
+                llm_resp = self._provider.chat(
+                    messages, temperature=0.1, max_tokens=1500, timeout=self.timeout
+                )
+                answer = llm_resp.content
+            else:
+                # Legacy direct Ollama call
+                resp = requests.post(
+                    f"{self.ollama_url}/api/chat",
+                    json={
+                        "model": self.model,
+                        "messages": messages,
+                        "stream": False,
+                        "options": {"temperature": 0.1, "num_predict": 1500},
+                    },
+                    timeout=self.timeout,
+                )
+                resp.raise_for_status()
+                answer = resp.json().get("message", {}).get("content", "")
             parsed = self._parse_json(answer)
 
             # Дополнительно извлекаем каналы если LLM пропустил
@@ -526,10 +544,12 @@ class SmartErrorInterpreter:
         ollama_url: str = None,
         model: str = None,
         timeout: int = 30,
+        provider: Optional["LLMProvider"] = None,
     ):
         self.ollama_url = ollama_url or os.environ.get("OLLAMA_URL", "http://localhost:11434")
         self.model = model or os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:14b")
         self.timeout = timeout
+        self._provider = provider
 
     def interpret(
         self,
@@ -563,18 +583,25 @@ class SmartErrorInterpreter:
         )
 
         try:
-            resp = requests.post(
-                f"{self.ollama_url}/api/chat",
-                json={
-                    "model": self.model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "stream": False,
-                    "options": {"temperature": 0.2, "num_predict": 2000},
-                },
-                timeout=self.timeout,
-            )
-            resp.raise_for_status()
-            answer = resp.json().get("message", {}).get("content", "")
+            messages = [{"role": "user", "content": prompt}]
+            if self._provider is not None:
+                llm_resp = self._provider.chat(
+                    messages, temperature=0.2, max_tokens=2000, timeout=self.timeout
+                )
+                answer = llm_resp.content
+            else:
+                resp = requests.post(
+                    f"{self.ollama_url}/api/chat",
+                    json={
+                        "model": self.model,
+                        "messages": messages,
+                        "stream": False,
+                        "options": {"temperature": 0.2, "num_predict": 2000},
+                    },
+                    timeout=self.timeout,
+                )
+                resp.raise_for_status()
+                answer = resp.json().get("message", {}).get("content", "")
             parsed = self._parse_json(answer)
 
             solutions = parsed.get("solutions", [])

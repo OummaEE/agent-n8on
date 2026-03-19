@@ -1,223 +1,246 @@
-# IMPLEMENTATION_STATUS
+# IMPLEMENTATION_STATUS.md
 
-## Purpose
-This document describes **what is actually implemented and verified now**.
+Last updated: 2026-03-19
 
-It exists to prevent confusion between:
-- current implementation reality,
-- target architecture,
-- future roadmap.
+This document tracks what is **actually implemented and working** vs what is **scaffolded** vs what is **planned only**.
 
-For target behavior, see [`SPECIFICATION.md`](./SPECIFICATION.md).
-For future work, see [`ROADMAP.md`](./ROADMAP.md).
+If it is not listed as "implemented" here, do not describe it as working in any doc or UI.
 
 ---
 
-## Current state summary
-agent-n8On already has a meaningful local n8n-oriented foundation, but the full target architecture is **not yet implemented**.
+## 1. Provider Layer
 
-The project is currently in a state where:
-- core local agent behavior exists,
-- Brain routing exists,
-- local Ollama integration exists,
-- n8n API integration exists,
-- final Windows installer validation is still pending after the latest fixes,
-- provider-aware hybrid (`local + api + auto`) mode is **not yet implemented**,
-- dedicated local n8n documentation retrieval is **not yet implemented**.
+### Active in production path
 
----
+- **ProviderManager** initialised at startup in `n8on.py` from `AgentConfig`
+- **`ask_ollama()`** routes through `ProviderManager.chat()` when available
+  - Falls back to direct `requests.post()` if ProviderManager init failed
+  - Logs provider choice via `DecisionLogger`
+- **IntentClassifier** accepts optional `provider` param; when set, LLM calls go through it
+- **SmartErrorInterpreter** accepts optional `provider` param; same behavior
+- **BrainLayer** passes `_provider_mgr._local` (OllamaProvider) to classifier/interpreter
 
-## What is implemented in the current codebase
-### 1. Local Ollama model path
-The current code uses Ollama as the active model path.
+### Partially wired
 
-Observed in code:
-- `OLLAMA_URL = "http://localhost:11434"`
-- `MODEL = "qwen2.5-coder:14b"`
-- chat and workflow generation requests are sent to Ollama locally.
+- **OllamaProvider** (`providers/local_ollama.py`) — used as the active local provider
+- **APIProvider** (`providers/api_provider.py`) — stub, raises `NotImplementedError`
+- **Auto mode** — ProviderManager supports it; will try local then fall back to API
 
-Implication:
-- local mode exists,
-- API fallback / provider switching is not yet visible in production code.
+### Model override precedence (as implemented)
 
-### 2. Brain / routing layer exists
-The current code shows Brain-first routing support.
+1. Hardcoded default: `qwen2.5-coder:14b`
+2. `%APPDATA%/Agent n8On/config.json` → `model` field (installer-written)
+3. Environment variable: `OLLAMA_MODEL`
+4. `AgentConfig.load()` merges all three in that order
 
-Observed in code/comments:
-- `BRAIN = None  # BrainLayer wrapping CONTROLLER (SLOW/FAST/CLARIFY routing)`
-- optional initialization of `BrainLayer`
-- request handling attempts Brain/Controller first before falling back to the older loop.
+### Not yet implemented
 
-Implication:
-- Brain-based request routing exists conceptually and in code integration,
-- this is not just documentation fantasy.
-
-### 3. n8n integration exists
-The current code already supports substantial n8n operations.
-
-Observed capabilities:
-- list workflows,
-- get workflow,
-- get executions,
-- get execution,
-- run workflow,
-- update workflow,
-- validate workflow,
-- create workflow,
-- activate workflow,
-- delete workflow.
-
-Implication:
-- the product already has real n8n API control, not just plans.
-
-### 4. Local skills loading exists
-The current code loads local skills from the `skills/` directory.
-
-Observed behavior:
-- `load_skills()`
-- merge skill tools into main `TOOLS`
-- describe skills dynamically.
-
-Implication:
-- there is already a local extensibility mechanism,
-- but this is not yet the same thing as a formal plugin architecture.
-
-### 5. Local memory / logs exist
-The current code already stores:
-- chat history,
-- user profile,
-- tasks,
-- logs.
-
-Implication:
-- some persistence exists,
-- but advanced repair-memory / n8n-specific error memory is still a future extension.
+- Actual API provider calls (Claude, OpenAI)
+- Per-task provider selection (e.g. use stronger model for complex tasks)
 
 ---
 
-## What was completed most recently on Windows/installer side
-### CI / build / runtime work completed
-1. Analyzed the self-hosted runner advice and decided to try `windows-2022` first.
-2. Created a GitHub Actions workflow with:
-   - diagnostics,
-   - retry logic,
-   - Defender exclusions.
-3. Completed expert review and fixed 4 bugs:
-   - exit code after retry,
-   - hard fail,
-   - broken output,
-   - upload paths.
-4. Ran 6 CI iterations and fixed specific issues one by one:
-   - removed deprecated `npm config msvs_version`,
-   - added `setuptools` for `No module 'distutils'`,
-   - moved to Node 22 for `v8::SourceLocation not found`,
-   - upgraded from Node 22.14 to 22.16,
-   - added portable Node and `manifest.json` to fix zip/runtime packaging.
-5. Runtime build succeeded and was uploaded to GitHub Releases.
-6. Rebuilt installer and tested on Azure VM:
-   - runtime downloaded,
-   - runtime unpacked,
-   - n8n started.
-7. Fixed Windows `\\?\` path bug where backend could not find the Python script.
-8. Final installer rebuild is ready for another test cycle.
+## 2. Knowledge Layer
+
+### Active in production path
+
+- `skills/instructions/*.md` — 4 instruction files loaded by keyword match in `brain_layer.py`
+- `skills/n8n_blocks/*.json` — 9 node block templates
+- `skills/n8n_templates/*.json` — 3 pre-built workflow templates
+- `n8n_recipes.py` — 21K lines of node generation recipes
+- `brain/learned_rules.md` — manually maintained lessons learned
+
+### Partially wired
+
+- **`KnowledgeSelector`** is instantiated in `BrainLayer.__init__()` and called in `_slow_path()`
+  - Retrieves `repair_hints`, `instruction_fragments`, `template_matches` before plan execution
+  - Logs which knowledge sources were used via `DecisionLogger`
+  - Retrieved context is not yet injected into LLM prompts (retrieval works, injection is next step)
+- **Instruction packs** — 3 initial packs (http_request, google_sheets, webhook) in `knowledge/instruction_packs/`
+- **Repair memory** — `knowledge/repair_memory/error_corrections.json` (empty, ready for entries)
+
+### Not yet implemented
+
+- Knowledge context injection into LLM system prompts
+- Automatic repair memory population (from successful repairs)
+- Auto-template generation (from confirmed workflows)
+- RAG / vector search
+- Online documentation augmentation
 
 ---
 
-## Important reality check
-### Not yet confirmed
-After the latest fixes, a fresh final Windows test has **not yet been completed**.
+## 3. Offline-First Policy
 
-That means the following must still be treated as **not fully verified in practice**:
-- complete install success on clean Windows after latest fixes,
-- complete runtime startup stability after latest packaging changes,
-- end-to-end workflow creation and repair success in the final rebuilt installer,
-- uninstall behavior.
+### Active in production path
 
----
+- Ollama runs locally — works without internet
+- `/api/status` reports `internet` and `effective_mode` fields (refreshed each status check)
+- `NetworkStatus` class detects internet + Ollama availability
+- `ProviderManager` respects mode: `local` never attempts API; `auto` tries local first
+- If `provider_mode=api` and API is not implemented, returns explicit error (not silent failure)
 
-## What is NOT yet implemented or not yet visible in production code
-### 1. Provider-aware hybrid mode
-Not yet visible in the current codebase:
-- `local + api + auto` provider selection,
-- remote/API fallback for weak local machines,
-- automatic provider choice based on online/offline state and task complexity.
+### Partially wired
 
-Current reality:
-- local Ollama path exists,
-- hybrid/provider layer does not yet appear to be implemented.
+- `agent_config.py` supports `knowledge_mode: local_first | local_only`
+- `KnowledgeSelector` only searches local files (no online augmentation path exists yet)
 
-### 2. Dedicated n8n documentation retrieval layer
-Not yet visible in the current codebase:
-- local n8n docs index,
-- n8n-specific RAG,
-- targeted retrieval over node documentation, schemas, and examples,
-- offline-first documentation cache for n8n.
+### Not yet implemented
 
-Current reality:
-- agent can talk to n8n as a system,
-- but does not yet appear to have a dedicated n8n knowledge retrieval layer.
-
-### 3. Explicit offline-first knowledge mode
-Not yet visible as a dedicated feature:
-- graceful knowledge mode selection when internet is absent,
-- clear distinction between local-only knowledge and online augmentation,
-- explicit user-facing explanation of online/offline limitations.
-
-### 4. Self-growing workflow library
-Not yet confirmed implemented:
-- export successful workflows into a reusable local library,
-- sanitize secrets before saving templates,
-- reuse successful workflows before generating from scratch.
-
-### 5. Error-correction memory (“грабли”)
-Not yet confirmed implemented as a dedicated system:
-- persistent mapping of error patterns to successful fixes,
-- first-class reuse of past corrections before new repair attempts.
-
-### 6. Golden templates / BlockLibrary for n8n
-Not yet confirmed implemented as a curated trusted layer:
-- reusable JSON blocks for the hardest n8n nodes,
-- systematic reuse in workflow generation.
-
-### 7. Full uninstall lifecycle cleanup
-Not yet confirmed end-to-end:
-- `installed_by_agent` ownership metadata,
-- optional removal of Ollama and models,
-- optional removal of agent-installed Node.js,
-- optional uninstall of agent-installed global `n8n`.
+- Honest degradation messaging to user when knowledge is limited
+- Online documentation fetch when internet is available
 
 ---
 
-## Current online/offline behavior
-### What should work offline now
-If all local components are already installed and running, the current architecture should still be able to do some work offline:
-- local Ollama chat/generation,
-- local n8n API operations,
-- local files/system operations,
-- local skills.
+## 4. Configuration
 
-### What is still weak or missing offline
-Without internet and without a dedicated local n8n knowledge cache:
-- the agent cannot rely on fresh online documentation,
-- weak local models may struggle on complex workflow generation,
-- there is no visible dedicated n8n offline docs retrieval layer yet.
+### Active in production path
 
----
+- **`AgentConfig`** loaded at startup in `n8on.py`, used to initialise:
+  - `ProviderManager` (ollama_url, model, provider_mode, api_key)
+  - `NetworkStatus` (ollama_url)
+  - `/api/status` response (provider_mode, knowledge_mode)
+- Load precedence: hardcoded defaults → installer config.json → env vars
+- Legacy `OLLAMA_URL` / `MODEL` globals still exist and are used by direct Ollama calls
 
-## Immediate next reality-based priorities
-- [ ] Re-run final Windows installer test after the latest fixes
-- [ ] Validate end-to-end install and runtime behavior on clean Windows
-- [ ] Validate workflow creation and repair after install
-- [ ] Add explicit provider layer (`local`, `api`, `auto`)
-- [ ] Add local n8n knowledge source(s) for offline-first retrieval
-- [ ] Add implementation-safe split between target docs and current verified reality
+### Not yet implemented
+
+- Config hot-reload (requires restart)
+- UI settings page
+- Config validation warnings
 
 ---
 
-## Documentation rule
-When documenting agent-n8On:
-- do not present planned architecture as already complete,
-- do not present target-state features as production-ready unless they have been verified,
-- keep implementation status explicit.
+## 5. Structured Decision Logging
 
-This file should be updated whenever a planned feature becomes verified reality.
+**Status: fully active in production path**
+
+**Log location:**
+- Windows: `%APPDATA%/Agent n8On/decisions.jsonl`
+- Other / fallback: `backend/memory/decisions.jsonl`
+
+**Format:** JSON lines (one JSON object per line, with `"event"` and `"ts"` fields).
+
+### Event types and wiring status
+
+| # | Event | Status | Wired at | Fields logged |
+|---|-------|--------|----------|---------------|
+| 1 | `routing` | **fully active** | `brain_layer.py` `handle()` | route (FAST/SLOW/CLARIFY), message preview, reason (multi-step connector, action verb count, too vague, default) |
+| 2 | `provider` | **fully active** | `n8on.py` `ask_ollama()` | provider (ollama/api), mode (local/api/auto/legacy), fallback used, internet state, ollama state, reason |
+| 3 | `knowledge` | **fully active** | `brain_layer.py` `_slow_path()` | sources checked, sources used, augmentation mode (local_only), fragments count, reason (which packs matched, why) |
+| 4 | `execution` | **fully active** | `executor.py` `_run_n8n_workflow_step()`, `_run_n8n_debug_step()` | workflow_id, workflow_name, execution_id, step_intent, success, error, failing_node |
+| 5 | `repair` | **fully active** | `brain_layer.py` `_handle_step_failure()` | attempt number, workflow_id, execution_id, error, failing_node, fix_description, what_changed, success |
+| 6 | `confirmation` | **fully active** | `brain_layer.py` `_request_plan_confirmation()`, `_handle_plan_confirmation()`, `_handle_solution_choice()` | state (asked/confirmed/cancelled/modified/rejected), user_response, problem_description, workflow_id, execution_id |
+
+### Security
+
+- **Never logs**: secrets, tokens, passwords, credential values, API keys
+- Message previews truncated to 120 chars
+- Error messages truncated to 300 chars
+- Credential extraction in `_handle_solution_choice()` is NOT logged
+
+### Legacy logging (still present)
+
+- `print()` statements in brain components
+- Chat history saved to `memory/chat_history.json`
+- Intent cache in `memory/intent_cache.json`
+- Session state in `memory/session_state.json`
+
+### Not yet implemented
+
+- Log rotation / size limits
+- Log viewer in UI
+- Log export / analysis tools
+
+---
+
+## 6. UI
+
+### Active in production path
+
+- Status badge: shows Ollama connected/disconnected + model name
+- Status badge shows provider_mode (if not local) and offline indicator
+- Status endpoint returns: `provider_mode`, `knowledge_mode`, `internet`, `effective_mode`
+
+### Not yet implemented
+
+- Display of knowledge mode in UI
+- Symptom collection form for user confirmation
+- Plan approval UI for SLOW tasks
+
+---
+
+## 7. Brain Layer
+
+### Active in production path
+
+- Router: FAST/SLOW/CLARIFY classification (regex + action verb counting)
+- Router.route_with_reason(): returns (path, reason) for structured logging
+- IntentClassifier: LLM-based semantic classification with 15+ intents
+  - Now routes through ProviderManager (OllamaProvider) when available
+- Planner: converts intent to ordered PlanSteps (no LLM)
+- Executor: runs steps with dependency handling (no LLM)
+- Verifier: checks execution results (no LLM)
+- ErrorInterpreter: rule-based error mapping (no LLM)
+- SmartErrorInterpreter: LLM-based error analysis
+  - Now routes through ProviderManager when available
+- BrainLayer: orchestrator with pending state machine for confirmations
+- Skill discovery: keyword-based matching in `_SKILL_KEYWORDS`
+- Knowledge retrieval: KnowledgeSelector called in `_slow_path()` (retrieval active, injection pending)
+- Decision logging: routing, knowledge, execution, repair, and confirmation events logged
+
+### Not yet implemented
+
+- Knowledge context injection into LLM prompts
+- Provider-aware routing (choose model by task complexity)
+
+---
+
+## 8. Installer / Uninstaller
+
+### Implemented
+
+- Tauri-based installer: downloads Ollama, Node.js, n8n
+- Writes `config.json` with user's model choice
+- Runtime build in GitHub Releases
+
+### Not yet implemented
+
+- `installed_by_agent` flag in config.json
+- Uninstaller cleanup dialog
+- Conditional removal of Ollama/Node.js/n8n
+
+**Installer rebuild required?** No — the new code is backward compatible. If `ProviderManager` fails to init, `ask_ollama()` falls back to the legacy direct Ollama call. No new config fields are required by the installer.
+
+---
+
+## 9. Integration Points Summary
+
+| Call Site | File | Logging Event |
+|-----------|------|---------------|
+| `ask_ollama()` | `n8on.py` | `provider` — mode, provider, fallback, internet, ollama, reason |
+| `BrainLayer.handle()` | `brain_layer.py` | `routing` — route, reason (from Router.route_with_reason) |
+| `BrainLayer._slow_path()` | `brain_layer.py` | `knowledge` — sources checked/used, augmentation, fragments, reason |
+| `Executor._run_n8n_workflow_step()` | `executor.py` | `execution` — workflow_id, name, execution_id, success, error, failing_node |
+| `Executor._run_n8n_debug_step()` | `executor.py` | `execution` — workflow_id, name, execution_id, success, error |
+| `BrainLayer._handle_step_failure()` | `brain_layer.py` | `repair` — attempt, workflow_id, execution_id, error, failing_node, fix, what_changed |
+| `BrainLayer._request_plan_confirmation()` | `brain_layer.py` | `confirmation` — state=asked |
+| `BrainLayer._handle_plan_confirmation()` | `brain_layer.py` | `confirmation` — state=confirmed/cancelled/modified |
+| `BrainLayer._handle_solution_choice()` | `brain_layer.py` | `confirmation` — state=confirmed/cancelled |
+| `IntentClassifier._classify_with_llm()` | `intent_classifier.py` | (routed through ProviderManager, logged at ask_ollama level) |
+| `SmartErrorInterpreter.interpret()` | `intent_classifier.py` | (routed through ProviderManager, logged at ask_ollama level) |
+
+---
+
+## 10. Non-n8n Skills (broad assistant features)
+
+### Present in code but secondary to n8n-first focus
+
+These exist in `backend/skills/` and are loaded via `skills_enabled.json`:
+- `auth_browse.py` — browser automation (Playwright)
+- `google_drive.py`, `google_calendar.py` — Google integrations
+- `telegram_bot.py` — Telegram messaging
+- `excel_reports.py`, `pdf_analyzer.py` — document tools
+- `voice_input.py` — audio input
+- `kommun_parser.py`, `boostcamp_crm.py` — domain-specific parsers
+
+**Policy**: These are kept as secondary tooling. Core product loop is n8n workflow generation/repair. These skills may be used as n8n workflow building blocks but are not the product's primary value.

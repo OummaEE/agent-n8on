@@ -57,26 +57,28 @@ class Router:
             message:            raw user message
             controller_handled: True if controller.handle_request returned handled=True
         """
+        route, _ = self.route_with_reason(message, controller_handled)
+        return route
+
+    def route_with_reason(self, message: str, controller_handled: bool) -> tuple:
+        """Like route(), but returns (path, reason) for logging."""
         msg = message.strip()
 
-        # If the controller already handled it → always FAST.
         if controller_handled:
-            return "FAST"
+            return "FAST", "controller already handled"
 
-        # Too vague → CLARIFY.
         if self._is_clarify(msg):
-            return "CLARIFY"
+            return "CLARIFY", f"too vague ({len(msg.split())} words, matches clarify pattern)"
 
-        # Multi-step connector present → SLOW.
-        if _SLOW_PATTERN.search(msg):
-            return "SLOW"
+        match = _SLOW_PATTERN.search(msg)
+        if match:
+            return "SLOW", f"multi-step connector detected: '{match.group()}'"
 
-        # Multiple distinct action verbs → SLOW.
-        if self._count_action_verbs(msg) >= 2:
-            return "SLOW"
+        verb_count = self._count_action_verbs(msg)
+        if verb_count >= 2:
+            return "SLOW", f"{verb_count} action verbs found"
 
-        # Default: FAST (will fall through to LLM / controller).
-        return "FAST"
+        return "FAST", "default (single action, no slow signals)"
 
     # ------------------------------------------------------------------
     def _is_clarify(self, msg: str) -> bool:

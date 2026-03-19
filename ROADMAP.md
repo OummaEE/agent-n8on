@@ -13,7 +13,35 @@ request -> routing -> provider choice -> knowledge retrieval -> workflow generat
 
 ---
 
-## Phase 0 — Finish Windows installation validation
+## Фаза -1: Архитектурный фундамент (wired into production)
+
+**Статус:** wired into production path
+
+**Дата:** 2026-03-18 (scaffolded) → 2026-03-19 (wired)
+
+**Что сделано:**
+- [x] Provider layer: `backend/providers/` (base, local_ollama, api_provider, provider_manager)
+- [x] Network status detection: `backend/providers/network_status.py`
+- [x] Knowledge layer: `backend/knowledge/` (knowledge_selector, instruction_packs, repair_memory, templates)
+- [x] 3 initial instruction packs: http_request, google_sheets, webhook
+- [x] Unified config: `backend/agent_config.py` (load precedence: defaults < installer < env)
+- [x] Decision logger: `backend/decision_logger.py` — 6 event types, all active
+- [x] UI status extended: `/api/status` returns provider_mode, internet, effective_mode
+- [x] `IMPLEMENTATION_STATUS.md` — honest tracking of implemented vs scaffolded vs planned
+- [x] Wired ProviderManager into production `ask_ollama()` path
+- [x] Wired KnowledgeSelector into brain_layer.py `_slow_path()`
+- [x] Wired DecisionLogger into brain_layer.py, executor.py, n8on.py (6 event types)
+
+**Не сделано (намеренно):**
+- [ ] Actual API provider implementation (Claude/OpenAI calls)
+- [ ] RAG / vector DB
+- [ ] Plugin architecture
+
+Подробнее о статусе каждого компонента: см. `IMPLEMENTATION_STATUS.md`
+
+---
+
+## Фаза 0: Завершение Windows-установки
 Goal: confirm the latest installer/runtime fixes on clean Windows.
 
 Tasks:
