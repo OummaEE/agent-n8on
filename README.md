@@ -18,19 +18,11 @@ n8n is powerful, but for most normal users it has two ugly barriers:
 - **setup pain** — installing and configuring the environment is annoying and fragile,
 - **debugging pain** — generating a workflow is easy compared to making it actually work.
 
-Most users do not want to learn:
+A third practical problem also matters:
 
-- npm,
-- local services,
-- environment variables,
-- n8n workflow JSON,
-- execution logs,
-- node configuration,
-- repair loops.
+- **hardware limits** — weaker PCs may run local models, but not well enough to generate complex workflows reliably.
 
-They want the automation to work.
-
-That is the point of agent-n8On.
+That is why agent-n8On must become strong not only through the model, but through **routing, templates, memory, and targeted n8n knowledge retrieval**.
 
 ---
 
@@ -100,41 +92,62 @@ User
                      -> learned rules saved
 ```
 
-This matters because not every request should go straight into workflow generation or heavy LLM handling.
+### 3. Model/provider layer decides how generation should run
+The product target is to support:
 
-### 3. If needed, the agent creates or updates an n8n workflow
+- `local` — local LLM only,
+- `api` — remote/API model only,
+- `auto` — choose the safest available path.
+
+This matters because weak machines may need targeted help instead of relying on raw local model strength.
+
+### 4. Knowledge layer supplies n8n-specific context
+The product target is to use:
+
+- local templates,
+- local repair memory,
+- local/offline n8n knowledge,
+- and, when available, online documentation augmentation.
+
+### 5. If needed, the agent creates or updates an n8n workflow
 The system produces workflow JSON aligned with the requested task.
 
-### 4. Agent validates the workflow
+### 6. Agent validates the workflow
 The system checks structural correctness before running.
 
-### 5. Agent runs the workflow
+### 7. Agent runs the workflow
 The system triggers a test execution and inspects n8n output.
 
-### 6. Agent repairs the workflow if needed
+### 8. Agent repairs the workflow if needed
 If there is an execution error or output mismatch, the agent updates the workflow and tries again.
 
-### 7. Agent asks the user to verify
+### 9. Agent asks the user to verify
 When automated checks pass, the agent asks the user whether everything works in real usage.
 
-### 8. Agent continues debugging if the user reports a problem
+### 10. Agent continues debugging if the user reports a problem
 If the user says the result is still wrong, the agent gathers concrete symptoms and re-enters the repair loop.
 
 ---
 
-## Brain-first processing model
-The front-door control flow is part of the product, not an implementation detail.
+## Current status vs target architecture
+### Already present in the repo
+- local Ollama-based model path,
+- Brain-based request routing,
+- n8n workflow CRUD / run / execution inspection,
+- validation and repair-oriented product logic,
+- local skills loading.
 
-### CLARIFY
-Used when the request is missing critical information or is too ambiguous to execute safely.
+### Not yet fully implemented
+- proper `local + API + auto` provider selection,
+- dedicated local n8n documentation retrieval,
+- explicit offline-first knowledge mode,
+- online documentation augmentation layer,
+- final verified post-fix Windows install cycle.
 
-### FAST
-Used when the request is clear, narrow, and can be handled directly without heavyweight planning.
+Read these files for the split between reality and plan:
 
-### SLOW
-Used when the request is complex and requires explicit planning, execution, verification, and often repair.
-
-The dedicated routing and planning logic is documented in [`BRAIN_ARCHITECTURE.md`](./BRAIN_ARCHITECTURE.md).
+- [`IMPLEMENTATION_STATUS.md`](./IMPLEMENTATION_STATUS.md)
+- [`ROADMAP.md`](./ROADMAP.md)
 
 ---
 
@@ -162,24 +175,14 @@ It must:
 - retry,
 - confirm with the user.
 
----
+### n8n-specific knowledge assistance
+The product target is not “generic smartness.”
+It must become strong through:
 
-## Current repository direction
-This repository contains the evolving implementation of agent-n8On as an n8n-first desktop system.
-
-The long-term architecture centers on:
-
-- Brain-based request routing,
-- local runtime orchestration,
-- n8n workflow creation and update,
-- execution inspection,
-- repair loops,
-- installer reliability,
-- user confirmation flow,
-- logs and diagnostics,
-- learned operational rules.
-
-Some historical parts of the repo reflect a broader local AI assistant direction. The current product direction is narrower and stricter: **n8n-first, repair-focused, user-confirmed automation**.
+- n8n-specific templates,
+- n8n-specific repair memory,
+- targeted documentation retrieval,
+- offline-first fallback when internet is unavailable.
 
 ---
 
@@ -187,10 +190,12 @@ Some historical parts of the repo reflect a broader local AI assistant direction
 Start here if you want the real product definition, not just scattered code behavior:
 
 - [`PROJECT_IDEA.md`](./PROJECT_IDEA.md) — what the product is and why it exists
-- [`SPECIFICATION.md`](./SPECIFICATION.md) — behavior rules and success criteria
+- [`SPECIFICATION.md`](./SPECIFICATION.md) — target behavior rules and success criteria
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md) — system layers, responsibilities, and flow
 - [`BRAIN_ARCHITECTURE.md`](./BRAIN_ARCHITECTURE.md) — routing, planning, execution, verification, learned rules
 - [`INSTALLER_SPEC.md`](./INSTALLER_SPEC.md) — installer behavior and failure handling
+- [`IMPLEMENTATION_STATUS.md`](./IMPLEMENTATION_STATUS.md) — what is actually implemented and verified now
+- [`ROADMAP.md`](./ROADMAP.md) — what still needs to be built next
 - [`CLAUDE.md`](./CLAUDE.md) — AI-assisted development rules for this repo
 
 If these documents conflict with older code comments or older README assumptions, the docs win.
@@ -202,8 +207,9 @@ If these documents conflict with older code comments or older README assumptions
 2. **installer reliability is part of the product**
 3. **a workflow that runs but does the wrong thing is not a success**
 4. **Brain routing is part of correctness, not just convenience**
-5. **user confirmation is mandatory before completion**
-6. **honesty about failure is better than fake success**
+5. **offline behavior must be explicit, not accidental**
+6. **user confirmation is mandatory before completion**
+7. **honesty about failure is better than fake success**
 
 ---
 
@@ -217,7 +223,8 @@ If these documents conflict with older code comments or older README assumptions
 - iterative repair,
 - user confirmation,
 - learned rules,
-- logs and diagnostics.
+- logs and diagnostics,
+- n8n-specific knowledge retrieval.
 
 ### Out of scope for the core product
 - pretending to be a generic assistant for every possible task,
@@ -238,6 +245,7 @@ A good version of this product should feel like this:
 
 If the app generates workflows but still leaves the user to manually untangle them, it has failed its main job.
 If the app routes requests badly before execution starts, it will generate avoidable failures downstream.
+If the app depends on internet or model strength without stating it clearly, it will confuse users.
 
 ---
 
@@ -248,6 +256,8 @@ The product direction is now explicitly centered on:
 - **one-click setup**
 - **Brain-based request routing**
 - **self-healing n8n workflows**
+- **provider-aware generation (local / API / auto)**
+- **offline-first n8n knowledge support**
 - **user-confirmed completion**
 
 That is the standard the repository should be moving toward.
